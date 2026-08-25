@@ -124,11 +124,19 @@ qboolean SndSys_Init (const snd_format_t* requested, snd_format_t* suggested)
 				"\tSamples   : %i\n",
 				wantspec.channels, wantspec.format, wantspec.freq, wantspec.samples);
 
-	if( SDL_OpenAudio( &wantspec, &obtainspec ) )
+	// SDL2 only converts to the requested format when 'obtained' is NULL.
+	// Passing a non-NULL 'obtained' - which is what SDL 1.2 wanted, and what
+	// this code was written against - makes SDL2 hand back the device's own
+	// native format instead. On modern Windows that is float32, so the
+	// mismatch test below rejects it, suggests a format whose width maps back
+	// to the same signed 16-bit request, and retries for ever. Asking for the
+	// conversion keeps the engine's mixer in the format it expects.
+	if( SDL_OpenAudio( &wantspec, NULL ) )
 	{
 		Con_Printf( "Failed to open the audio device! (%s)\n", SDL_GetError() );
 		return false;
 	}
+	obtainspec = wantspec;
 
 	Con_Printf("Obtained audio specification:\n"
 				"\tChannels  : %i\n"

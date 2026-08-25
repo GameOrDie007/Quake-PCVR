@@ -11,3 +11,7 @@ build-mingw/
 release/
 id1/
 dopa/
+*.o
+*.d
+*.exe
+run/
