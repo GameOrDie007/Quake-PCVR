@@ -2361,6 +2361,10 @@ qboolean VID_InitMode(viddef_mode_t *mode)
 
 void VID_Shutdown (void)
 {
+	// The OpenXR swapchain images are GL textures owned by the context this
+	// function is about to destroy, so the session has to go first.
+	VR_Shutdown();
+
 	VID_EnableJoystick(false);
 	VID_SetMouse(false, false, false);
 	VID_RestoreSystemGamma();
