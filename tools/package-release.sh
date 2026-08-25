@@ -96,9 +96,12 @@ cd /d "%~dp0"
 start "" "%~dp0darkplaces-sdl.exe" -basedir . -novr -window %*
 EOF
 
-# No launcher for Dimension of the Past. Gamedir switching is broken in
-# this engine on this toolchain - see PROGRESS - so dopa is copied in and
-# ready, but there is no working way to select it yet.
+cat > "$DEST/Dimension of the Past.bat" <<'EOF'
+@echo off
+rem Start Virtual Desktop on the headset and connect it FIRST.
+cd /d "%~dp0"
+start "" "%~dp0darkplaces-sdl.exe" -basedir . -game dopa %*
+EOF
 
 echo
 echo "Packaged: $DEST"
