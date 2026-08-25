@@ -379,9 +379,104 @@ Also worth recording, because it explains a brightness difference from stock:
 `r_lasersight` defaults to **2**, which is "Torchlight" — it hangs a dynamic
 light on the aim point. The owner's own config sets it to 0.
 
+---
+
+# Milestone 3a (OpenXR bring-up) — built, awaiting headset test
+
+The OpenXR half of `TBXR_Common.c` is ported to Win32 and desktop GL. Their
+maths, spaces, swapchain format, frame structure and layer composition are
+kept as they are; only the platform seam changes.
+
+## The seam, in full
+
+| theirs | ours |
+|---|---|
+| EGL context on a JNI app thread | the SDL window and GL context the engine already creates, bound through `XrGraphicsBindingOpenGLWin32KHR` |
+| `XR_KHR_opengl_es_enable` | `XR_KHR_opengl_enable` |
+| `XrSwapchainImageOpenGLESKHR` | `XrSwapchainImageOpenGLKHR` |
+| `GL_EXT_multisampled_render_to_texture`, resolving implicitly on the tiler | an explicit multisample framebuffer and a resolve blit, as in the Quake II port |
+| every entry point via `xrGetInstanceProcAddr` into name-shadowing globals | the loader is linked directly, so the table goes away; extension entry points are still resolved by hand |
+| their own GLES loader | the engine's `qgl*` pointers, which already cover every FBO, multisample and blit call needed |
+| Android extensions, thread hinting, Java lifecycle, the message queue | dropped |
+
+`xr_linear.h` and `openxr_helpers.h` are vendored from the OpenXR SDK
+(Apache-2.0), as their build does.
+`XrMatrix4x4f_CreateProjectionFov` is called with `GRAPHICS_OPENGL` instead of
+`GRAPHICS_OPENGL_ES`; that header treats the two identically, so it is a name
+change and nothing more.
+
+## Two halves, not one
+
+Their whole OpenXR stack initialises before the engine starts, because EGL
+belongs to their app thread. A PC session has to be bound to the GL context
+SDL creates *inside* `Host_Init`, so it splits:
+
+1. **Before `Host_Init`** — instance, system, eye resolution. None of that
+   needs graphics, and it is what the engine sizes itself to.
+2. **After `Host_Init`** — session, spaces, swapchains, framebuffers.
+
+A side effect worth knowing: the first half runs before the console exists, so
+anything it prints would vanish — including the reason a headset was not
+found, which is exactly the message one wants. Those lines are buffered and
+replayed as soon as the console is up.
+
+## How the engine gets sized to an eye
+
+`vid_sdl.c` keeps `mode->width/height` at the eye buffer size while creating a
+small window, rather than reading the size back from the window. So
+`vid.width` is the eye buffer — which is what every refdef and 2D calculation
+is sized against, and what their own `config.cfg` records as `vid_width 3639`.
+The window then only ever receives a mirror blit of the left eye, and its real
+size lives in `vid_mirrorwidth`/`vid_mirrorheight` for that blit.
+
+Unlike their build this does **not** write the `vid_width`/`vid_height` cvars.
+Those are archived, and a 3600-pixel window recorded in `config.cfg` would
+break the flatscreen fallback the owner asked to keep working. Their build has
+no flatscreen mode, so the question does not arise for them.
+
+## One trap taken from the Quake II port
+
+vsync is forced off once a session is live. The engine still swaps the desktop
+window every frame at the end of `CL_EndUpdateScreen`, and with vsync on that
+blocks on the monitor and caps the headset to the monitor's rate. In Quake II
+this presented as a flat 30fps and looked like an engine bug.
+
+## Verified without a headset
+
+- The instance comes up against **VirtualDesktopXR 1.0.10** — so the loader,
+  the extension list and runtime detection all work.
+- With nothing connected, `xrGetSystem` returns
+  `XR_ERROR_FORM_FACTOR_UNAVAILABLE` and the build falls back to flatscreen
+  cleanly, printing why.
+- `-novr` skips OpenXR entirely.
+- Both paths still load E1M1 and render.
+
+Everything past `xrGetSystem` — session, swapchains, the frame loop, the
+projection layer, the quad layer — needs the headset and is untested.
+
+## Deliberately not here yet
+
+- **Controller input.** That is their `OpenXrInput.c` (which has no Android
+  dependency at all and should transfer as-is) and the input half of
+  `QuakeQuest_OpenXR.c`. Until it lands the weapon pose stays synthesised even
+  in VR, so the gun sits where a viewmodel would rather than inside the
+  player's eye, and the keyboard drives movement.
+- **Their startup credits screen.** Their app thread calls `MR_ToggleMenu(2)`
+  after the engine initialises. It belongs with the rest of the game half, in
+  3b.
+- **Graceful shutdown.** Stock `Sys_Quit` exits the process directly, so the
+  session is not torn down. Their `sys_shared.c` routes this through
+  `QC_exit`; worth doing once the loop is settled. The Quake II port noted
+  that killing the process mid-frame leaves the runtime stuck.
+
+## Environment note
+
+Do not drive `python - <<'EOF'` heredocs through the Bash tool for edits
+containing backslashes — the escapes arrive mangled, and a `\n` inside a C
+string literal silently becomes a real newline. Write the script to a file and
+run it, or use the editing tool.
+
 ## Next
 
-Milestone 3: OpenXR bring-up. Port `TBXR_Common.c` to Win32 and desktop GL
-starting from `../Quake2VR-741/src/vr/vr_surface.c`, bring `OpenXrInput.c`
-across as-is, and strip the JNI half from `QuakeQuest_OpenXR.c`. First headset
-test comes at the end of that, not before.
+Headset test of 3a, then milestone 3b: `OpenXrInput.c` and the game half of
+`QuakeQuest_OpenXR.c`.
