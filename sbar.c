@@ -103,7 +103,7 @@ cvar_t sbar_gametime = {CVAR_SAVE, "sbar_gametime", "1", "shows an overlay for t
 cvar_t sbar_miniscoreboard_size = {CVAR_SAVE, "sbar_miniscoreboard_size", "-1", "sets the size of the mini deathmatch overlay in items, or disables it when set to 0, or sets it to a sane default when set to -1"};
 cvar_t sbar_flagstatus_right = {CVAR_SAVE, "sbar_flagstatus_right", "0", "moves Nexuiz flag status icons to the right"};
 cvar_t sbar_flagstatus_pos = {CVAR_SAVE, "sbar_flagstatus_pos", "115", "pixel position of the Nexuiz flag status icons, from the bottom"};
-cvar_t sbar_info_pos = {CVAR_SAVE, "sbar_info_pos", "0", "pixel position of the info strings (such as showfps), from the bottom"};
+cvar_t sbar_info_pos = {CVAR_SAVE, "sbar_info_pos", "180", "pixel position of the info strings (such as showfps), from the bottom"};
 
 cvar_t cl_deathscoreboard = {0, "cl_deathscoreboard", "1", "shows scoreboard (+showscores) while dead"};
 
@@ -119,6 +119,35 @@ static void Sbar_IntermissionOverlay (void);
 static void Sbar_FinaleOverlay (void);
 
 
+extern qboolean vrMode;
+extern vec3_t hmdorientation;
+extern cvar_t vr_worldscale;
+
+//Calculate the y-offset of the status bar dependent on where the user is looking
+int Sbar_GetYOffset()
+{
+	if (hmdorientation[PITCH] <= 15.0f || !vrMode)
+		return 0;
+
+	int offset = (vid_conheight.value * ((hmdorientation[PITCH] - 15.0f) / 90.0f));
+	if (offset < 0) offset = 0;
+	return offset;
+}
+
+qboolean VR_UseScreenLayer();
+
+int Sbar_GetXOffset()
+{
+	float offsetX, offsetY;
+
+	if (VR_UseScreenLayer())
+		return 0;
+
+	GetHUDOffset(&offsetX, &offsetY);
+
+	//This will give the status bar depth in the 3D space
+	return (int)((r_stereo_side ? -20 : 20) + offsetX);
+}
 
 /*
 ===============
@@ -1217,16 +1246,14 @@ void Sbar_ShowFPS(void)
 		fps_y = vid_conheight.integer - sbar_info_pos.integer - fps_strings*fps_scaley;
 		if (soundstring[0])
 		{
-			fps_x = vid_conwidth.integer - DrawQ_TextWidth(soundstring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR);
-			DrawQ_Fill(fps_x, fps_y, vid_conwidth.integer - fps_x, fps_scaley, 0, 0, 0, 0.5, 0);
+			fps_x = (vid_conwidth.integer / 2) - (DrawQ_TextWidth(soundstring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR) / 2) + Sbar_GetXOffset();
 			DrawQ_String(fps_x, fps_y, soundstring, 0, fps_scalex, fps_scaley, 1, 1, 1, 1, 0, NULL, true, FONT_INFOBAR);
 			fps_y += fps_scaley;
 		}
 		if (fpsstring[0])
 		{
 			r_draw2d_force = true;
-			fps_x = vid_conwidth.integer - DrawQ_TextWidth(fpsstring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR);
-			DrawQ_Fill(fps_x, fps_y, vid_conwidth.integer - fps_x, fps_scaley, 0, 0, 0, 0.5, 0);
+			fps_x = (vid_conwidth.integer / 2) - (DrawQ_TextWidth(fpsstring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR) / 2) + Sbar_GetXOffset();
 			if (red)
 				DrawQ_String(fps_x, fps_y, fpsstring, 0, fps_scalex, fps_scaley, 1, 0, 0, 1, 0, NULL, true, FONT_INFOBAR);
 			else
@@ -1236,57 +1263,49 @@ void Sbar_ShowFPS(void)
 		}
 		if (timedemostring1[0])
 		{
-			fps_x = vid_conwidth.integer - DrawQ_TextWidth(timedemostring1, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR);
-			DrawQ_Fill(fps_x, fps_y, vid_conwidth.integer - fps_x, fps_scaley, 0, 0, 0, 0.5, 0);
+			fps_x = (vid_conwidth.integer / 2) -  (DrawQ_TextWidth(timedemostring1, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR) / 2) + Sbar_GetXOffset();
 			DrawQ_String(fps_x, fps_y, timedemostring1, 0, fps_scalex, fps_scaley, 1, 1, 1, 1, 0, NULL, true, FONT_INFOBAR);
 			fps_y += fps_scaley;
 		}
 		if (timedemostring2[0])
 		{
-			fps_x = vid_conwidth.integer - DrawQ_TextWidth(timedemostring2, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR);
-			DrawQ_Fill(fps_x, fps_y, vid_conwidth.integer - fps_x, fps_scaley, 0, 0, 0, 0.5, 0);
+			fps_x = (vid_conwidth.integer / 2) - (DrawQ_TextWidth(timedemostring2, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR) / 2) + Sbar_GetXOffset();
 			DrawQ_String(fps_x, fps_y, timedemostring2, 0, fps_scalex, fps_scaley, 1, 1, 1, 1, 0, NULL, true, FONT_INFOBAR);
 			fps_y += fps_scaley;
 		}
 		if (timestring[0])
 		{
-			fps_x = vid_conwidth.integer - DrawQ_TextWidth(timestring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR);
-			DrawQ_Fill(fps_x, fps_y, vid_conwidth.integer - fps_x, fps_scaley, 0, 0, 0, 0.5, 0);
+			fps_x = (vid_conwidth.integer / 2) - (DrawQ_TextWidth(timestring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR) / 2) + Sbar_GetXOffset();
 			DrawQ_String(fps_x, fps_y, timestring, 0, fps_scalex, fps_scaley, 1, 1, 1, 1, 0, NULL, true, FONT_INFOBAR);
 			fps_y += fps_scaley;
 		}
 		if (datestring[0])
 		{
-			fps_x = vid_conwidth.integer - DrawQ_TextWidth(datestring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR);
-			DrawQ_Fill(fps_x, fps_y, vid_conwidth.integer - fps_x, fps_scaley, 0, 0, 0, 0.5, 0);
+			fps_x = (vid_conwidth.integer / 2) - (DrawQ_TextWidth(datestring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR) / 2) + Sbar_GetXOffset();
 			DrawQ_String(fps_x, fps_y, datestring, 0, fps_scalex, fps_scaley, 1, 1, 1, 1, 0, NULL, true, FONT_INFOBAR);
 			fps_y += fps_scaley;
 		}
 		if (speedstring[0])
 		{
-			fps_x = vid_conwidth.integer - DrawQ_TextWidth(speedstring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR);
-			DrawQ_Fill(fps_x, fps_y, vid_conwidth.integer - fps_x, fps_scaley, 0, 0, 0, 0.5, 0);
+			fps_x = (vid_conwidth.integer / 2) - (DrawQ_TextWidth(speedstring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR) / 2) + Sbar_GetXOffset();
 			DrawQ_String(fps_x, fps_y, speedstring, 0, fps_scalex, fps_scaley, 1, 1, 1, 1, 0, NULL, true, FONT_INFOBAR);
 			fps_y += fps_scaley;
 		}
 		if (topspeedstring[0])
 		{
-			fps_x = vid_conwidth.integer - DrawQ_TextWidth(topspeedstring, 0, fps_scalex, fps_scaley, false, FONT_INFOBAR);
-			DrawQ_Fill(fps_x, fps_y, vid_conwidth.integer - fps_x, fps_scaley, 0, 0, 0, 0.5, 0);
+			fps_x = (vid_conwidth.integer / 2) - (DrawQ_TextWidth(topspeedstring, 0, fps_scalex, fps_scaley, false, FONT_INFOBAR) / 2) + Sbar_GetXOffset();
 			DrawQ_String(fps_x, fps_y, topspeedstring, 0, fps_scalex, fps_scaley, 1, 1, 1, 1, 0, NULL, false, FONT_INFOBAR);
 			fps_y += fps_scaley;
 		}
 		if (blurstring[0])
 		{
-			fps_x = vid_conwidth.integer - DrawQ_TextWidth(blurstring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR);
-			DrawQ_Fill(fps_x, fps_y, vid_conwidth.integer - fps_x, fps_scaley, 0, 0, 0, 0.5, 0);
+			fps_x = (vid_conwidth.integer / 2) - (DrawQ_TextWidth(blurstring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR) / 2) + Sbar_GetXOffset();
 			DrawQ_String(fps_x, fps_y, blurstring, 0, fps_scalex, fps_scaley, 1, 1, 1, 1, 0, NULL, true, FONT_INFOBAR);
 			fps_y += fps_scaley;
 		}
 		if (texstring[0])
 		{
-			fps_x = vid_conwidth.integer - DrawQ_TextWidth(texstring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR);
-			DrawQ_Fill(fps_x, fps_y, vid_conwidth.integer - fps_x, fps_scaley, 0, 0, 0, 0.5, 0);
+			fps_x = (vid_conwidth.integer / 2) - (DrawQ_TextWidth(texstring, 0, fps_scalex, fps_scaley, true, FONT_INFOBAR) / 2) + Sbar_GetXOffset();
 			DrawQ_String(fps_x, fps_y, texstring, 0, fps_scalex, fps_scaley, 1, 1, 1, 1, 0, NULL, true, FONT_INFOBAR);
 			fps_y += fps_scaley;
 		}
@@ -1348,8 +1367,8 @@ void Sbar_Draw (void)
 		{
 			if (sb_showscores || (cl.stats[STAT_HEALTH] <= 0 && cl_deathscoreboard.integer))
 			{
-				sbar_x = (vid_conwidth.integer - 640)/2;
-				sbar_y = vid_conheight.integer - 47;
+				sbar_x = (vid_conwidth.integer - 640)/2 + Sbar_GetXOffset();
+				sbar_y = vid_conheight.integer - (Sbar_GetYOffset() + 40);
 				Sbar_DrawAlphaPic (0, 0, sb_scorebar, sbar_alpha_bg.value);
 				Sbar_DrawScoreboard ();
 			}
@@ -1360,8 +1379,8 @@ void Sbar_Draw (void)
 				int redflag, blueflag;
 				float x;
 
-				sbar_x = (vid_conwidth.integer - 320)/2;
-				sbar_y = vid_conheight.integer - 24 - 16;
+				sbar_x = (vid_conwidth.integer - 320)/2 + Sbar_GetXOffset();
+				sbar_y = vid_conheight.integer - (Sbar_GetYOffset() + 40);
 
 				// calculate intensity to draw weapons bar at
 				fade = 3.2 - 2 * (cl.time - cl.weapontime);
@@ -1453,8 +1472,8 @@ void Sbar_Draw (void)
 				int redflag, blueflag;
 				float x;
 
-				sbar_x = (vid_conwidth.integer - 640)/2;
-				sbar_y = vid_conheight.integer - 47;
+				sbar_x = (vid_conwidth.integer - 640)/2 + Sbar_GetXOffset();
+				sbar_y = vid_conheight.integer - (Sbar_GetYOffset() + 40);
 
 				// calculate intensity to draw weapons bar at
 				fade = 3 - 2 * (cl.time - cl.weapontime);
@@ -1611,8 +1630,9 @@ void Sbar_Draw (void)
 		}
 		else // Quake and others
 		{
-			sbar_x = (vid_conwidth.integer - 320)/2;
-			sbar_y = vid_conheight.integer - SBAR_HEIGHT;
+			//Include stereo offset in x
+			sbar_x = (vid_conwidth.integer - 320)/2 + Sbar_GetXOffset();
+			sbar_y = vid_conheight.integer - (Sbar_GetYOffset() + 40) - SBAR_HEIGHT;
 			// LordHavoc: changed to draw the deathmatch overlays in any multiplayer mode
 			//if (cl.gametype == GAME_DEATHMATCH && gamemode != GAME_TRANSFUSION)
 
@@ -1730,7 +1750,14 @@ void Sbar_Draw (void)
 	if (cl.csqc_vidvars.drawcrosshair && crosshair.integer >= 1 && !cl.intermission && !r_letterbox.value)
 	{
 		pic = Draw_CachePic (va(vabuf, sizeof(vabuf), "gfx/crosshair%i", crosshair.integer));
-		DrawQ_Pic((vid_conwidth.integer - pic->width * crosshair_size.value) * 0.5f, (vid_conheight.integer - pic->height * crosshair_size.value) * 0.5f, pic, pic->width * crosshair_size.value, pic->height * crosshair_size.value, crosshair_color_red.value, crosshair_color_green.value, crosshair_color_blue.value, crosshair_color_alpha.value, 0);
+		int stereoOffset = vr_worldscale.value > 200.0f ? 12 : 5;
+		int yOffset = (vr_worldscale.value > 200.0f ? 20 : 5);
+		float hudOffsetX, hudOffsetY;
+		GetHUDOffset(&hudOffsetX, &hudOffsetY);
+		DrawQ_Pic((vid_conwidth.integer - pic->width * crosshair_size.value) * 0.5f + (r_stereo_side ? -stereoOffset : stereoOffset) + hudOffsetX,
+				  (vid_conheight.integer - pic->height * crosshair_size.value) * 0.5f + yOffset + hudOffsetY,
+				  pic, pic->width * crosshair_size.value, pic->height * crosshair_size.value,
+				  crosshair_color_red.value, crosshair_color_green.value, crosshair_color_blue.value, crosshair_color_alpha.value, 0);
 	}
 
 	if (cl_prydoncursor.integer > 0)
@@ -2016,7 +2043,7 @@ void Sbar_Score (int margin)
 	int sbar_y_save = sbar_y;
 
 
-	sbar_y = (int) (vid_conheight.value - (32+12));
+	sbar_y = (int) (vid_conheight.value - (Sbar_GetYOffset() + 44));
 	sbar_x -= margin;
 
 	me = cl.playerentity - 1;
@@ -2165,7 +2192,7 @@ void Sbar_IntermissionOverlay (void)
 		return;
 	}
 
-	sbar_x = (vid_conwidth.integer - 320) >> 1;
+	sbar_x = ((vid_conwidth.integer - 320) >> 1) + Sbar_GetXOffset();
 	sbar_y = (vid_conheight.integer - 200) >> 1;
 
 	DrawQ_Pic (sbar_x + 64, sbar_y + 24, sb_complete, 0, 0, 1, 1, 1, 1 * sbar_alpha_fg.value, 0);

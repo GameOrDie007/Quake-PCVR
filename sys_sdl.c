@@ -17,6 +17,7 @@
 #include <SDL.h>
 
 #include "quakedef.h"
+#include "vr_pc.h"
 
 // =======================================================================
 // General routines
@@ -198,7 +199,11 @@ int main (int argc, char *argv[])
 	// we don't know which systems we'll want to init, yet...
 	SDL_Init(0);
 
+	// Their host.c reduces Host_Main to Host_Init, because on Android the app
+	// thread owns the frame loop and calls into the engine. VR_MainLoop is
+	// that loop's PC counterpart and does not return.
 	Host_Main();
+	VR_MainLoop();
 
 	return 0;
 }

@@ -159,7 +159,10 @@ OBJ_COMMON= \
 	prvm_exec.o \
 	r_explosion.o \
 	r_lerpanim.o \
+	r_lasersight.o \
 	r_lightning.o \
+	r_weaponwheel.o \
+	vr_pc.o \
 	r_modules.o \
 	r_shadow.o \
 	r_sky.o \

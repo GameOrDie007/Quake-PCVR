@@ -269,9 +269,119 @@ Two notes for later:
   load before the client ever connects, so a `wait`-based script only ever
   captures the loading plaque.
 
+---
+
+# Milestone 2 (their engine changeset) — complete
+
+Their whole engine changeset is applied and builds. E1M1 renders with their
+view code, their HUD, their menus and their weapon wheel, flatscreen, with no
+OpenXR yet.
+
+## What was applied
+
+**28 files taken wholesale from their HEAD tree**, LF-normalised and otherwise
+byte-identical: `view.c`, `cl_input.c`, `cl_main.c`, `cl_screen.c`, `host.c`,
+`gl_rmain.c`, `sbar.c`, `sv_phys.c`, `menu.c`, `console.c`, `keys.c`,
+`world.c`, `sv_main.c`, `gl_draw.c`, `cl_particles.c`, `cl_video.c`,
+`cl_parse.c`, `meshqueue.c`, `cmd.c`, `progsvm.h`, `client.h`, `render.h`,
+`screen.h`, `cl_screen.h`, `menu.h`, `server.h`, plus the new
+`r_lasersight.c` and `r_weaponwheel.c`.
+
+Each was checked first for Android content and none carries any. The PC
+backends need no restoring — this branch *is* the stock base, so `vid_sdl.c`,
+`sys_sdl.c`, `thread_sdl.c` and the rest were never removed.
+
+**Four lines hand-applied to `gl_backend.c`**, which is the entire
+renderer-side VR seam. The rest of their `gl_backend.c` diff is GLES
+workarounds and stays stock:
+
+- the `VR_GetVRProjection` prototype,
+- the call in `R_Viewport_InitPerspective`,
+- the call in `R_Viewport_InitPerspectiveInfinite`,
+- capturing `GL_FRAMEBUFFER_BINDING` in `R_Mesh_Start`, so the engine restores
+  the eye framebuffer the VR layer bound rather than framebuffer zero.
+
+**The `cl_movementspeed` rename** in `vid_shared.c` and `vid_sdl.c`. They
+replaced `cl_forwardspeed`/`cl_backspeed`/`cl_sidespeed` with one cvar, and
+those two files still referenced the old three.
+
+## What is ours
+
+`vr_pc.c` and `vr_pc.h` — the PC counterpart of their `TBXR_Common.c`,
+`QuakeQuest_OpenXR.c` and the `QC_*` glue in `vid_android.c`. At this milestone
+it holds the tracking globals, the big-screen state, and flatscreen paths for
+everything the engine now asks the VR layer for. Those paths are not
+placeholders; they are what keeps the desktop build working once OpenXR lands.
+
+Two of the flat values are exact reconstructions of cvars their code deletes,
+not guesses:
+
+- `GetFOV()` returns **73.739795** degrees. Stock computed
+  `frustum_y = tan(fov * pi/360) * 3/4` from a horizontal `fov 90`; their
+  version drops the `3/4` and treats `GetFOV` as vertical, so the identical
+  frustum comes from `2*atan(0.75)`.
+- `GetSysTicrate()` returns **1/72**, which is stock's `sys_ticrate` default of
+  0.0138889 to the digit — and the Quest's refresh rate besides.
+
+`VR_MainLoop`, entered from `sys_sdl.c`, is the shape of their app thread's
+loop: `QC_BeginFrame`, `QC_DrawFrame` per eye, `QC_EndFrame`. Their `host.c`
+reduces `Host_Main` to just `Host_Init`, because on Android the app thread owns
+the loop, so PC needs its own.
+
+Flatscreen also synthesises a weapon pose, because their `view.c` builds the
+viewmodel in **world space** from `gunangles` and `weaponOffset` — in VR the
+gun really is an object in the room. Left at zero the gun sits inside the
+player's eye at world scale, which is what the first test build showed. The
+flat path aims it along the view and offsets it forward, right and down through
+the same axis remap `view.c` uses.
+
+## Two runtime gates, both in `cl_input.c`
+
+The owner's rule is a run-time check, not a compile-time fork, so these are the
+only two places their code is conditioned rather than copied:
+
+- `CL_AdjustAngles` treats flatscreen as `vr_yawmode 2`. Snap and swivel turning
+  are meaningless without a head to turn, and their stick-control branch *is*
+  stock DarkPlaces' keyboard turning, unchanged — so flat behaves exactly as
+  stock did. Without this, the default `vr_yawmode 1` overwrites yaw every
+  frame and mouse look does not work.
+- `VectorCopy(gunangles, cl.cmd.viewangles)` — the line they annotated "took me
+  bloody ages to find" — falls back to `cl.viewangles` when there is no
+  controller, so shots go where the view points.
+
+## Verified
+
+- Builds clean. E1M1 loads and renders: world, their HUD, viewmodel.
+- Their Options menu is present and correct — the `--QUAKE QUEST--` header,
+  Controller Settings, Bullet-Time Mode, Laser Sight, Positional Tracking,
+  Player Movement Speed at their 170, Game Brightness at their 1.4.
+- `weaponwheel.json` parses: "8 weapons from weaponwheel.json section default".
+
+## Three things that look like defects and are theirs
+
+Checked rather than assumed, and left alone because the point is a 1:1 port:
+
+- **Text appears smeared in menus.** It is `r_textshadow`, whose default they
+  raise from 0 to 3. Setting it back to 0 gives a perfectly clean menu, so
+  nothing is overlapping. The shadow is in console units, so it is
+  proportionally the same on their headset; an 800x600 nearest-neighbour
+  screenshot just exaggerates it.
+- **`Can't register variable cl_yawspeed, already defined`.** They add a
+  registration in `cl_input.c` while stock's in `cl_main.c` remains. Same
+  cvar object either way, so the value is their 150 regardless.
+- **The Controller menu has no console command.** `Cmd_AddCommand` is called
+  twice with the name `menu_reset`, the second time for
+  `M_Menu_Controller_f`, so the second is refused. Their own Android log shows
+  the same `Cmd_AddCommand: menu_reset already defined`. The page is still
+  reachable through Options, which is how it is meant to be used.
+
+Also worth recording, because it explains a brightness difference from stock:
+`r_lasersight` defaults to **2**, which is "Torchlight" — it hangs a dynamic
+light on the aim point. The owner's own config sets it to 0.
+
 ## Next
 
-Milestone 2: restore the PC backends they deleted and apply their engine
-changeset, minus the Android platform half. Still no OpenXR — the goal is their
-game logic and their menus running flatscreen, which is what makes the VR layer
-testable afterwards.
+Milestone 3: OpenXR bring-up. Port `TBXR_Common.c` to Win32 and desktop GL
+starting from `../Quake2VR-741/src/vr/vr_surface.c`, bring `OpenXrInput.c`
+across as-is, and strip the JNI half from `QuakeQuest_OpenXR.c`. First headset
+test comes at the end of that, not before.

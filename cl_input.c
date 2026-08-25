@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // rights reserved.
 
 #include "quakedef.h"
+#include "vr_pc.h"
 #include "csprogs.h"
 #include "thread.h"
 
@@ -47,6 +48,7 @@ state bit 2 is edge triggered on the down to up transition
 ===============================================================================
 */
 
+extern float gunangles[3];
 
 kbutton_t	in_mlook, in_klook;
 kbutton_t	in_left, in_right, in_forward, in_back;
@@ -361,6 +363,10 @@ Returns 0.25 if a key was pressed and released during the frame,
 1.0 if held for the entire time
 ===============
 */
+extern float analogx;
+extern float analogy;
+extern int analogenabled;
+
 float CL_KeyState (kbutton_t *key)
 {
 	float		val;
@@ -402,6 +408,20 @@ float CL_KeyState (kbutton_t *key)
 
 	key->state &= 1;		// clear impulses
 
+	//ANALOG
+	if (analogenabled)
+	{
+	if (key==&in_moveright)
+	return max(0,analogx);
+	if (key==&in_moveleft)
+	return max(0,-analogx);
+	if (key==&in_forward)
+	return max(0,analogy);
+	if (key==&in_back)
+	return max(0,-analogy);
+	}
+	//END
+
 	return val;
 }
 
@@ -411,15 +431,23 @@ float CL_KeyState (kbutton_t *key)
 //==========================================================================
 
 cvar_t cl_upspeed = {CVAR_SAVE, "cl_upspeed","400","vertical movement speed (while swimming or flying)"};
-cvar_t cl_forwardspeed = {CVAR_SAVE, "cl_forwardspeed","400","forward movement speed"};
-cvar_t cl_backspeed = {CVAR_SAVE, "cl_backspeed","400","backward movement speed"};
-cvar_t cl_sidespeed = {CVAR_SAVE, "cl_sidespeed","350","strafe movement speed"};
+cvar_t cl_movementspeed = {CVAR_SAVE, "cl_movementspeed","170","forward movement speed"};
 
 cvar_t cl_movespeedkey = {CVAR_SAVE, "cl_movespeedkey","2.0","how much +speed multiplies keyboard movement speed"};
 cvar_t cl_movecliptokeyboard = {0, "cl_movecliptokeyboard", "0", "if set to 1, any move is clipped to the nine keyboard states; if set to 2, only the direction is clipped, not the amount"};
 
-cvar_t cl_yawspeed = {CVAR_SAVE, "cl_yawspeed","140","keyboard yaw turning speed"};
+cvar_t vr_yawmode = {CVAR_SAVE, "vr_yawmode","1","0 = swivel-chair, 1 = snap, 2 = stick"};
+cvar_t cl_walkdirection = {CVAR_SAVE, "cl_walkdirection","1","0 - Walk in direction of off-hand controller, 1 - Walk in direction of HMD"};
+cvar_t cl_comfort = {CVAR_SAVE, "cl_comfort","45.0","angle by which comfort mode adjusts yaw"};
+cvar_t cl_yawspeed = {CVAR_SAVE, "cl_yawspeed","150","keyboard yaw turning speed"};
 cvar_t cl_pitchspeed = {CVAR_SAVE, "cl_pitchspeed","150","keyboard pitch turning speed"};
+cvar_t cl_yawmult = {CVAR_SAVE, "cl_yawmult","1.0","Multiplier for yaw (leave at 1.0)"};
+cvar_t cl_pitchmult = {CVAR_SAVE, "cl_pitchmult","1.0","Multiplier for yaw (leave at 1.0)"};
+cvar_t cl_controllerdeadzone = {0, "cl_controllerdeadzone","0.05","Amount of deadzone to prevent movement drift due to badly calibrated controller (0.0 to 1.0)"};
+cvar_t cl_righthanded = {CVAR_SAVE, "cl_righthanded","1","right-handed?"};
+cvar_t vr_weaponpitchadjust = {CVAR_SAVE, "vr_weaponpitchadjust","-20.0","Weapon pitch adjustment"};
+cvar_t cl_trackingmode = {CVAR_SAVE, "cl_trackingmode","1","Tracking Mode:- 1 - 6DoF or 0 - 3DoF"};
+
 
 cvar_t cl_anglespeedkey = {CVAR_SAVE, "cl_anglespeedkey","1.5","how much +speed multiplies keyboard turning speed"};
 
@@ -436,7 +464,7 @@ cvar_t cl_movement_wallfriction = {0, "cl_movement_wallfriction", "1", "how fast
 cvar_t cl_movement_waterfriction = {0, "cl_movement_waterfriction", "-1", "how fast you slow down (should match sv_waterfriction), if less than 0 the cl_movement_friction variable is used instead"};
 cvar_t cl_movement_edgefriction = {0, "cl_movement_edgefriction", "1", "how much to slow down when you may be about to fall off a ledge (should match edgefriction)"};
 cvar_t cl_movement_stepheight = {0, "cl_movement_stepheight", "18", "how tall a step you can step in one instant (should match sv_stepheight)"};
-cvar_t cl_movement_accelerate = {0, "cl_movement_accelerate", "10", "how fast you accelerate (should match sv_accelerate)"};
+cvar_t cl_movement_accelerate = {0, "cl_movement_accelerate", "1000", "how fast you accelerate (should match sv_accelerate)"};
 cvar_t cl_movement_airaccelerate = {0, "cl_movement_airaccelerate", "-1", "how fast you accelerate while in the air (should match sv_airaccelerate), if less than 0 the cl_movement_accelerate variable is used instead"};
 cvar_t cl_movement_wateraccelerate = {0, "cl_movement_wateraccelerate", "-1", "how fast you accelerate while in water (should match sv_wateraccelerate), if less than 0 the cl_movement_accelerate variable is used instead"};
 cvar_t cl_movement_jumpvelocity = {0, "cl_movement_jumpvelocity", "270", "how fast you move upward when you begin a jump (should match the quakec code)"};
@@ -462,6 +490,8 @@ cvar_t cl_csqc_generatemousemoveevents = {0, "cl_csqc_generatemousemoveevents", 
 
 extern cvar_t v_flipped;
 
+qboolean headtracking = true;
+
 /*
 ================
 CL_AdjustAngles
@@ -469,7 +499,7 @@ CL_AdjustAngles
 Moves the local angle positions
 ================
 */
-static void CL_AdjustAngles (void)
+static void CL_AdjustAngles (qboolean firstCall)
 {
 	float	speed;
 	float	up, down;
@@ -481,8 +511,22 @@ static void CL_AdjustAngles (void)
 
 	if (!(in_strafe.state & 1))
 	{
-		cl.viewangles[YAW] -= speed*cl_yawspeed.value*CL_KeyState (&in_right);
-		cl.viewangles[YAW] += speed*cl_yawspeed.value*CL_KeyState (&in_left);
+		// Flatscreen has no head to turn, so snap and swivel are meaningless
+		// there and it always takes what is here the stick-control branch -
+		// which is stock DarkPlaces' keyboard turning, unchanged.
+		int yawmode = VR_Enabled() ? vr_yawmode.integer : 2;
+
+		//Comfort mode
+		if ((yawmode == 1) && firstCall)
+		{
+			cl.viewangles[YAW] = (float)(cl.comfortInc) * cl_comfort.value;
+		}
+		//Stick control mode
+		if (yawmode == 2)
+		{
+			cl.viewangles[YAW] -= speed*cl_yawspeed.value*CL_KeyState (&in_right);
+			cl.viewangles[YAW] += speed*cl_yawspeed.value*CL_KeyState (&in_left);
+		}
 	}
 	if (in_klook.state & 1)
 	{
@@ -525,7 +569,7 @@ void CL_Input (void)
 	static float old_mouse_x = 0, old_mouse_y = 0;
 
 	// clamp before the move to prevent starting with bad angles
-	CL_AdjustAngles ();
+	CL_AdjustAngles (true);
 
 	if(v_flipped.integer)
 		cl.viewangles[YAW] = -cl.viewangles[YAW];
@@ -538,20 +582,20 @@ void CL_Input (void)
 	// get basic movement from keyboard
 	if (in_strafe.state & 1)
 	{
-		cl.cmd.sidemove += cl_sidespeed.value * CL_KeyState (&in_right);
-		cl.cmd.sidemove -= cl_sidespeed.value * CL_KeyState (&in_left);
+		cl.cmd.sidemove += cl_movementspeed.value * CL_KeyState (&in_right);
+		cl.cmd.sidemove -= cl_movementspeed.value * CL_KeyState (&in_left);
 	}
 
-	cl.cmd.sidemove += cl_sidespeed.value * CL_KeyState (&in_moveright);
-	cl.cmd.sidemove -= cl_sidespeed.value * CL_KeyState (&in_moveleft);
+	cl.cmd.sidemove += cl_movementspeed.value * CL_KeyState (&in_moveright);
+	cl.cmd.sidemove -= cl_movementspeed.value * CL_KeyState (&in_moveleft);
 
 	cl.cmd.upmove += cl_upspeed.value * CL_KeyState (&in_up);
 	cl.cmd.upmove -= cl_upspeed.value * CL_KeyState (&in_down);
 
 	if (! (in_klook.state & 1) )
 	{
-		cl.cmd.forwardmove += cl_forwardspeed.value * CL_KeyState (&in_forward);
-		cl.cmd.forwardmove -= cl_backspeed.value * CL_KeyState (&in_back);
+		cl.cmd.forwardmove += cl_movementspeed.value * CL_KeyState (&in_forward);
+		cl.cmd.forwardmove -= cl_movementspeed.value * CL_KeyState (&in_back);
 	}
 
 	// adjust for speed key
@@ -686,7 +730,7 @@ void CL_Input (void)
 	}
 
 	// clamp after the move to prevent rendering with bad angles
-	CL_AdjustAngles ();
+	CL_AdjustAngles (false);
 
 	if(cl_movecliptokeyboard.integer)
 	{
@@ -737,16 +781,16 @@ void CL_Input (void)
 		else if(cl_movecliptokeyboard.integer)
 		{
 			// digital direction, digital amount
-			if(cl.cmd.sidemove >= cl_sidespeed.value * f * 0.5)
-				cl.cmd.sidemove = cl_sidespeed.value * f;
-			else if(cl.cmd.sidemove <= -cl_sidespeed.value * f * 0.5)
-				cl.cmd.sidemove = -cl_sidespeed.value * f;
+			if(cl.cmd.sidemove >= cl_movementspeed.value * f * 0.5)
+				cl.cmd.sidemove = cl_movementspeed.value * f;
+			else if(cl.cmd.sidemove <= -cl_movementspeed.value * f * 0.5)
+				cl.cmd.sidemove = -cl_movementspeed.value * f;
 			else
 				cl.cmd.sidemove = 0;
-			if(cl.cmd.forwardmove >= cl_forwardspeed.value * f * 0.5)
-				cl.cmd.forwardmove = cl_forwardspeed.value * f;
-			else if(cl.cmd.forwardmove <= -cl_backspeed.value * f * 0.5)
-				cl.cmd.forwardmove = -cl_backspeed.value * f;
+			if(cl.cmd.forwardmove >= cl_movementspeed.value * f * 0.5)
+				cl.cmd.forwardmove = cl_movementspeed.value * f;
+			else if(cl.cmd.forwardmove <= -cl_movementspeed.value * f * 0.5)
+				cl.cmd.forwardmove = -cl_movementspeed.value * f;
 			else
 				cl.cmd.forwardmove = 0;
 		}
@@ -1802,8 +1846,14 @@ void CL_SendMove(void)
 	cl.cmd.buttons = bits;
 	cl.cmd.impulse = in_impulse;
 
-	// set viewangles
-	VectorCopy(cl.viewangles, cl.cmd.viewangles);
+	// set angles
+	//Use gun angles - Took me bloody ages to find this line!!
+	{
+		// Flatscreen has no tracked controller to aim with, so it keeps
+		// stock's behaviour of shooting where the view points.
+		const float *aimangles = VR_Enabled() ? gunangles : cl.viewangles;
+		VectorCopy(aimangles, cl.cmd.viewangles);
+	}
 
 	msecdelta = (int)(floor(cl.cmd.time * 1000) - floor(cl.movecmd[1].time * 1000));
 	cl.cmd.msec = (unsigned char)bound(0, msecdelta, 255);
@@ -2215,6 +2265,17 @@ void CL_InitInput (void)
 	Cmd_AddCommand ("cycleweapon", IN_CycleWeapon, "send an impulse number to server to select the next usable weapon out of several (example: 9 4 8) if you are holding one of these, and choose the first one if you are holding none of these");
 #endif
 	Cmd_AddCommand ("register_bestweapon", IN_BestWeapon_Register_f, "(for QC usage only) change weapon parameters to be used by bestweapon; stuffcmd this in ClientConnect");
+
+	Cvar_RegisterVariable(&vr_yawmode);
+	Cvar_RegisterVariable(&cl_walkdirection);
+	Cvar_RegisterVariable(&cl_comfort);
+	Cvar_RegisterVariable(&cl_yawspeed);
+	Cvar_RegisterVariable(&cl_pitchmult);
+	Cvar_RegisterVariable(&cl_yawmult);
+	Cvar_RegisterVariable(&cl_controllerdeadzone);
+	Cvar_RegisterVariable(&cl_righthanded);
+	Cvar_RegisterVariable(&vr_weaponpitchadjust);
+	Cvar_RegisterVariable(&cl_trackingmode);
 
 	Cvar_RegisterVariable(&cl_movecliptokeyboard);
 	Cvar_RegisterVariable(&cl_movement);

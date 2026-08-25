@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // r_main.c
 
 #include "quakedef.h"
+#include <stdbool.h>
 #include "cl_dyntexture.h"
 #include "r_shadow.h"
 #include "polygon.h"
@@ -45,6 +46,37 @@ qboolean r_loadfog;
 static qboolean r_loaddds;
 static qboolean r_savedds;
 static qboolean r_gpuskeletal;
+
+// Wolfenstein 3D, DOOM and QUAKE use the same coordinate/unit system:
+// 8 foot (96 inch) height wall == 64 units, 1.5 inches per pixel unit
+// 1.0 pixel unit / 1.5 inch == 0.666666 pixel units per inch
+cvar_t vr_worldscale = {CVAR_SAVE, "vr_worldscale", "26.2467", "VR World scale multiplier"};
+
+qboolean VR_UseScreenLayer();
+float VR_GetIPD();
+bool VR_GetOffCenterFov(int eye, float *offsetX, float *offsetY);
+
+float GetStereoSeparation()
+{
+	return VR_UseScreenLayer() ? 0.0f : vr_worldscale.value * VR_GetIPD();
+}
+
+
+//Define the stereo side we are drawing
+int r_stereo_side;
+
+//Console units a 2D element must move so that it appears straight ahead of this eye.
+//Needed because the runtime frustum is asymmetric, so the eye buffer centre is not the
+//forward axis. Elements that the player fuses at depth need this or they diverge.
+void GetHUDOffset(float *x, float *y)
+{
+	float offsetX = 0.0f, offsetY = 0.0f;
+
+	VR_GetOffCenterFov(r_stereo_side, &offsetX, &offsetY);
+
+	*x = offsetX * vid_conwidth.integer;
+	*y = offsetY * vid_conheight.integer;
+}
 
 //
 // screen size info
@@ -110,7 +142,9 @@ cvar_t r_fakelight = {0, "r_fakelight","0", "render 'fake' lighting instead of r
 cvar_t r_fakelight_intensity = {0, "r_fakelight_intensity","0.75", "fakelight intensity modifier"};
 #define FAKELIGHT_ENABLED (r_fakelight.integer >= 2 || (r_fakelight.integer && r_refdef.scene.worldmodel && !r_refdef.scene.worldmodel->lit))
 
-cvar_t r_wateralpha = {CVAR_SAVE, "r_wateralpha","1", "opacity of water polygons"};
+cvar_t r_lasersight = {CVAR_SAVE, "r_lasersight", "2","Whether laser sight aim is used"};
+
+cvar_t r_wateralpha = {CVAR_SAVE, "r_wateralpha","0.7", "opacity of water polygons"};
 cvar_t r_dynamic = {CVAR_SAVE, "r_dynamic","1", "enables dynamic lights (rocket glow and such)"};
 cvar_t r_fullbrights = {CVAR_SAVE, "r_fullbrights", "1", "enables glowing pixels in quake textures (changes need r_restart to take effect)"};
 cvar_t r_shadows = {CVAR_SAVE, "r_shadows", "0", "casts fake stencil shadows from models onto the world (rtlights are unaffected by this); when set to 2, always cast the shadows in the direction set by r_shadows_throwdirection, otherwise use the model lighting."};
@@ -124,14 +158,14 @@ cvar_t r_shadows_shadowmapscale = {CVAR_SAVE, "r_shadows_shadowmapscale", "1", "
 cvar_t r_shadows_shadowmapbias = {CVAR_SAVE, "r_shadows_shadowmapbias", "-1", "sets shadowmap bias for fake shadows. -1 sets the value of r_shadow_shadowmapping_bias. Needs shadowmapping ON."};
 cvar_t r_q1bsp_skymasking = {0, "r_q1bsp_skymasking", "1", "allows sky polygons in quake1 maps to obscure other geometry"};
 cvar_t r_polygonoffset_submodel_factor = {0, "r_polygonoffset_submodel_factor", "0", "biases depth values of world submodels such as doors, to prevent z-fighting artifacts in Quake maps"};
-cvar_t r_polygonoffset_submodel_offset = {0, "r_polygonoffset_submodel_offset", "14", "biases depth values of world submodels such as doors, to prevent z-fighting artifacts in Quake maps"};
+cvar_t r_polygonoffset_submodel_offset = {0, "r_polygonoffset_submodel_offset", "0", "biases depth values of world submodels such as doors, to prevent z-fighting artifacts in Quake maps"};//changed default 14 to 0 to fix Tegra Z-buffer depth
 cvar_t r_polygonoffset_decals_factor = {0, "r_polygonoffset_decals_factor", "0", "biases depth values of decals to prevent z-fighting artifacts"};
 cvar_t r_polygonoffset_decals_offset = {0, "r_polygonoffset_decals_offset", "-14", "biases depth values of decals to prevent z-fighting artifacts"};
 cvar_t r_fog_exp2 = {0, "r_fog_exp2", "0", "uses GL_EXP2 fog (as in Nehahra) rather than realistic GL_EXP fog"};
 cvar_t r_fog_clear = {0, "r_fog_clear", "1", "clears renderbuffer with fog color before render starts"};
 cvar_t r_drawfog = {CVAR_SAVE, "r_drawfog", "1", "allows one to disable fog rendering"};
 cvar_t r_transparentdepthmasking = {CVAR_SAVE, "r_transparentdepthmasking", "0", "enables depth writes on transparent meshes whose materially is normally opaque, this prevents seeing the inside of a transparent mesh"};
-cvar_t r_transparent_sortmindist = {CVAR_SAVE, "r_transparent_sortmindist", "0", "lower distance limit for transparent sorting"};
+cvar_t r_transparent_sortmindist = {CVAR_SAVE, "r_transparent_sortmindist", "1", "lower distance limit for transparent sorting"};
 cvar_t r_transparent_sortmaxdist = {CVAR_SAVE, "r_transparent_sortmaxdist", "32768", "upper distance limit for transparent sorting"};
 cvar_t r_transparent_sortarraysize = {CVAR_SAVE, "r_transparent_sortarraysize", "4096", "number of distance-sorting layers"};
 cvar_t r_celshading = {CVAR_SAVE, "r_celshading", "0", "cartoon-style light shading (OpenGL 2.x only)"}; // FIXME remove OpenGL 2.x only once implemented for DX9
@@ -183,7 +217,7 @@ cvar_t r_glsl_postprocess_uservec2_enable = {CVAR_SAVE, "r_glsl_postprocess_user
 cvar_t r_glsl_postprocess_uservec3_enable = {CVAR_SAVE, "r_glsl_postprocess_uservec3_enable", "1", "enables postprocessing uservec3 usage, creates USERVEC1 define (only useful if default.glsl has been customized)"};
 cvar_t r_glsl_postprocess_uservec4_enable = {CVAR_SAVE, "r_glsl_postprocess_uservec4_enable", "1", "enables postprocessing uservec4 usage, creates USERVEC1 define (only useful if default.glsl has been customized)"};
 
-cvar_t r_water = {CVAR_SAVE, "r_water", "0", "whether to use reflections and refraction on water surfaces (note: r_wateralpha must be set below 1)"};
+cvar_t r_water = {CVAR_SAVE, "r_water", "1", "whether to use reflections and refraction on water surfaces (note: r_wateralpha must be set below 1)"};
 cvar_t r_water_clippingplanebias = {CVAR_SAVE, "r_water_clippingplanebias", "1", "a rather technical setting which avoids black pixels around water edges"};
 cvar_t r_water_resolutionmultiplier = {CVAR_SAVE, "r_water_resolutionmultiplier", "0.5", "multiplier for screen resolution when rendering refracted/reflected scenes, 1 is full quality, lower values are faster"};
 cvar_t r_water_refractdistort = {CVAR_SAVE, "r_water_refractdistort", "0.01", "how much water refractions shimmer"};
@@ -195,7 +229,7 @@ cvar_t r_water_fbo = {CVAR_SAVE, "r_water_fbo", "1", "enables use of render to t
 
 cvar_t r_lerpsprites = {CVAR_SAVE, "r_lerpsprites", "0", "enables animation smoothing on sprites"};
 cvar_t r_lerpmodels = {CVAR_SAVE, "r_lerpmodels", "1", "enables animation smoothing on models"};
-cvar_t r_lerplightstyles = {CVAR_SAVE, "r_lerplightstyles", "0", "enable animation smoothing on flickering lights"};
+cvar_t r_lerplightstyles = {CVAR_SAVE, "r_lerplightstyles", "1", "enable animation smoothing on flickering lights"};
 cvar_t r_waterscroll = {CVAR_SAVE, "r_waterscroll", "1", "makes water scroll around, value controls how much"};
 
 cvar_t r_bloom = {CVAR_SAVE, "r_bloom", "0", "enables bloom effect (makes bright pixels affect neighboring pixels)"};
@@ -208,7 +242,9 @@ cvar_t r_bloom_colorexponent = {CVAR_SAVE, "r_bloom_colorexponent", "1", "how ex
 cvar_t r_bloom_colorsubtract = {CVAR_SAVE, "r_bloom_colorsubtract", "0.125", "reduces bloom colors by a certain amount"};
 cvar_t r_bloom_scenebrightness = {CVAR_SAVE, "r_bloom_scenebrightness", "1", "global rendering brightness when bloom is enabled"};
 
-cvar_t r_hdr_scenebrightness = {CVAR_SAVE, "r_hdr_scenebrightness", "1", "global rendering brightness"};
+//1.4 on both devices as per Bummsers suggestion (17/01/2023)
+cvar_t r_hdr_scenebrightness = {CVAR_SAVE, "r_hdr_scenebrightness", "1.4", "global rendering brightness"};
+
 cvar_t r_hdr_glowintensity = {CVAR_SAVE, "r_hdr_glowintensity", "1", "how bright light emitting textures should appear"};
 cvar_t r_hdr_irisadaptation = {CVAR_SAVE, "r_hdr_irisadaptation", "0", "adjust scene brightness according to light intensity at player location"};
 cvar_t r_hdr_irisadaptation_multiplier = {CVAR_SAVE, "r_hdr_irisadaptation_multiplier", "2", "brightness at which value will be 1.0"};
@@ -4200,6 +4236,7 @@ void GL_Main_Init(void)
 		Cvar_RegisterVariable (&gl_fogend);
 		Cvar_RegisterVariable (&gl_skyclip);
 	}
+	Cvar_RegisterVariable(&vr_worldscale);
 	Cvar_RegisterVariable(&r_motionblur);
 	Cvar_RegisterVariable(&r_damageblur);
 	Cvar_RegisterVariable(&r_motionblur_averaging);
@@ -4252,6 +4289,7 @@ void GL_Main_Init(void)
 	Cvar_RegisterVariable(&r_speeds);
 	Cvar_RegisterVariable(&r_fullbrights);
 	Cvar_RegisterVariable(&r_wateralpha);
+	Cvar_RegisterVariable(&r_lasersight);
 	Cvar_RegisterVariable(&r_dynamic);
 	Cvar_RegisterVariable(&r_fakelight);
 	Cvar_RegisterVariable(&r_fakelight_intensity);
@@ -4378,6 +4416,8 @@ void Render_Init(void)
 	R_Particles_Init();
 	R_Explosion_Init();
 	R_LightningBeams_Init();
+	R_LaserSights_Init();
+	R_WeaponWheel_Init();
 	Mod_RenderInit();
 }
 
@@ -6243,6 +6283,11 @@ finish:
 	}
 }
 
+qboolean R_Stereo_Active()
+{
+	return true;
+}
+
 static void R_Bloom_StartFrame(void)
 {
 	int i;
@@ -6340,7 +6385,7 @@ static void R_Bloom_StartFrame(void)
 		Cvar_SetValueQuick(&r_damageblur, 0);
 	}
 
-	if (!(r_glsl_postprocess.integer || (!R_Stereo_ColorMasking() && r_glsl_saturation.value != 1) || (v_glslgamma.integer && !vid_gammatables_trivial))
+	if (!(r_glsl_postprocess.integer || (r_glsl_saturation.value != 1) || (v_glslgamma.integer && !vid_gammatables_trivial))
 	 && !r_bloom.integer
 	 && (R_Stereo_Active() || (r_motionblur.value <= 0 && r_damageblur.value <= 0))
 	 && !useviewfbo
@@ -6645,7 +6690,7 @@ static void R_BlendView(int fbo, rtexture_t *depthtexture, rtexture_t *colortext
 			| (r_refdef.viewblend[3] > 0 ? SHADERPERMUTATION_VIEWTINT : 0)
 			| ((v_glslgamma.value && !vid_gammatables_trivial) ? SHADERPERMUTATION_GAMMARAMPS : 0)
 			| (r_glsl_postprocess.integer ? SHADERPERMUTATION_POSTPROCESSING : 0)
-			| ((!R_Stereo_ColorMasking() && r_glsl_saturation.value != 1) ? SHADERPERMUTATION_SATURATION : 0);
+			| ((r_glsl_saturation.value != 1) ? SHADERPERMUTATION_SATURATION : 0);
 
 		if (r_fb.colortexture)
 		{
@@ -7104,7 +7149,7 @@ R_RenderView
 */
 int dpsoftrast_test;
 extern cvar_t r_shadow_bouncegrid;
-void R_RenderView(void)
+void R_RenderView()
 {
 	matrix4x4_t originalmatrix = r_refdef.view.matrix, offsetmatrix;
 	int fbo;
@@ -7129,11 +7174,8 @@ void R_RenderView(void)
 	R_AnimCache_ClearCache();
 
 	/* adjust for stereo display */
-	if(R_Stereo_Active())
-	{
-		Matrix4x4_CreateFromQuakeEntity(&offsetmatrix, 0, r_stereo_separation.value * (0.5f - r_stereo_side), 0, 0, r_stereo_angle.value * (0.5f - r_stereo_side), 0, 1);
-		Matrix4x4_Concat(&r_refdef.view.matrix, &originalmatrix, &offsetmatrix);
-	}
+	Matrix4x4_CreateFromQuakeEntity(&offsetmatrix, 0, GetStereoSeparation() * (0.5f - r_stereo_side), 0, 0, r_stereo_angle.value * (0.5f - r_stereo_side), 0, 1);
+	Matrix4x4_Concat(&r_refdef.view.matrix, &originalmatrix, &offsetmatrix);
 
 	if (r_refdef.view.isoverlay)
 	{
@@ -7425,6 +7467,22 @@ void R_RenderScene(int fbo, rtexture_t *depthtexture, rtexture_t *colortexture)
 		R_DrawLightningBeams();
 		if (r_timereport_active)
 			R_TimeReport("lightning");
+
+        qboolean cldead = (cl.stats[STAT_HEALTH] <= 0 && cl.stats[STAT_HEALTH] != -666 && cl.stats[STAT_HEALTH] != -2342);
+        int activeWeapon = cl.stats[STAT_ACTIVEWEAPON];
+        if (!cl.intermission && !cls.demoplayback && r_lasersight.integer && !cldead && activeWeapon != IT_AXE && activeWeapon != IT_GRENADE_LAUNCHER)
+        {
+            R_DrawLaserSights();
+            if (r_timereport_active)
+                R_TimeReport("lasersights");
+        }
+
+        if (weaponwheel_active)
+        {
+            R_DrawWeaponWheel();
+            if (r_timereport_active)
+                R_TimeReport("weaponwheel");
+        }
 	}
 
 	if (cl.csqc_loaded)
@@ -7514,7 +7572,7 @@ static const unsigned short bboxelements[36] =
 	1, 0, 2, 1, 2, 3,
 };
 
-static void R_DrawBBoxMesh(vec3_t mins, vec3_t maxs, float cr, float cg, float cb, float ca)
+void R_DrawBBoxMesh(vec3_t mins, vec3_t maxs, float cr, float cg, float cb, float ca)
 {
 	int i;
 	float *v, *c, f1, f2, vertex3f[8*3], color4f[8*4];
@@ -7551,6 +7609,45 @@ static void R_DrawBBoxMesh(vec3_t mins, vec3_t maxs, float cr, float cg, float c
 	R_Mesh_ResetTextureState();
 	R_SetupShader_Generic_NoTexture(false, false);
 	R_Mesh_Draw(0, 8, 0, 12, NULL, NULL, 0, bboxelements, NULL, 0);
+}
+
+void R_DrawBLineMesh(vec3_t mins, vec3_t maxs, float thickness, float cr, float cg, float cb, float ca)
+{
+    int i;
+    float *v, *c, f1, f2, vertex3f[8*3], color4f[8*4];
+
+    RSurf_ActiveWorldEntity();
+
+    GL_BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    GL_DepthMask(false);
+    GL_DepthRange(0, 1);
+    GL_PolygonOffset(r_refdef.polygonfactor, r_refdef.polygonoffset);
+//	R_Mesh_ResetTextureState();
+
+    vertex3f[ 0] = mins[0];vertex3f[ 1] = mins[1];vertex3f[ 2] = mins[2]; // left bottom front
+    vertex3f[ 3] = mins[0]+thickness;vertex3f[ 4] = mins[1];vertex3f[ 5] = mins[2]; // right bottom front
+    vertex3f[ 6] = mins[0];vertex3f[ 7] = mins[1]+thickness;vertex3f[ 8] = mins[2]; // left top front
+    vertex3f[ 9] = mins[0]+thickness;vertex3f[10] = mins[1]+thickness;vertex3f[11] = mins[2]; // right top front
+    vertex3f[12] = maxs[0]+thickness;vertex3f[13] = maxs[1]+thickness;vertex3f[14] = maxs[2]; // left bottom back
+    vertex3f[15] = maxs[0];vertex3f[16] = maxs[1]+thickness;vertex3f[17] = maxs[2]; // right bottom back
+    vertex3f[18] = maxs[0]+thickness;vertex3f[19] = maxs[1];vertex3f[20] = maxs[2]; // left top back
+    vertex3f[21] = maxs[0];vertex3f[22] = maxs[1];vertex3f[23] = maxs[2]; // right top back
+    R_FillColors(color4f, 8, cr, cg, cb, ca);
+    if (r_refdef.fogenabled)
+    {
+        for (i = 0, v = vertex3f, c = color4f;i < 8;i++, v += 3, c += 4)
+        {
+            f1 = RSurf_FogVertex(v);
+            f2 = 1 - f1;
+            c[0] = c[0] * f1 + r_refdef.fogcolor[0] * f2;
+            c[1] = c[1] * f1 + r_refdef.fogcolor[1] * f2;
+            c[2] = c[2] * f1 + r_refdef.fogcolor[2] * f2;
+        }
+    }
+    R_Mesh_PrepareVertices_Generic_Arrays(8, vertex3f, color4f, NULL);
+    R_Mesh_ResetTextureState();
+    R_SetupShader_Generic_NoTexture(false, false);
+    R_Mesh_Draw(0, 8, 0, 12, NULL, NULL, 0, bboxelements, NULL, 0);
 }
 
 static void R_DrawEntityBBoxes_Callback(const entity_render_t *ent, const rtlight_t *rtlight, int numsurfaces, int *surfacelist)

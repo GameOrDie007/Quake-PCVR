@@ -23,7 +23,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define SCREEN_H
 
 void CL_Screen_Init (void);
-void CL_UpdateScreen (void);
+void CL_BeginUpdateScreen ();
+void CL_EndUpdateScreen ();
 void SCR_CenterPrint(const char *str);
 
 void SCR_BeginLoadingPlaque (qboolean startup);
@@ -42,7 +43,6 @@ extern float scr_con_current; // current height of displayed console
 extern int sb_lines;
 
 extern cvar_t scr_viewsize;
-extern cvar_t scr_fov;
 extern cvar_t showfps;
 extern cvar_t showtime;
 extern cvar_t showdate;

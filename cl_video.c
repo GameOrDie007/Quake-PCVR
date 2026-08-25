@@ -619,7 +619,7 @@ void CL_Video_KeyEvent( int key, int ascii, qboolean down )
 {
 	// only react to up events, to allow the user to delay the abortion point if it suddenly becomes interesting..
 	if( !down ) {
-		if( key == K_ESCAPE || key == K_ENTER || key == K_SPACE ) {
+		if( key == K_ESCAPE || key == K_ENTER || key == K_MOUSE1 || key == K_SPACE ) {
 			CL_VideoStop();
 		}
 	}

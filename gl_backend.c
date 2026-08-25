@@ -2,6 +2,7 @@
 #include "quakedef.h"
 #include "cl_collision.h"
 #include "dpsoftrast.h"
+#include <stdbool.h>
 #ifdef SUPPORTD3D
 #include <d3d9.h>
 extern LPDIRECT3DDEVICE9 vid_d3d9dev;
@@ -914,6 +915,11 @@ void R_Viewport_InitOrtho(r_viewport_t *v, const matrix4x4_t *cameramatrix, int 
 #endif
 }
 
+// Supplied by the VR layer. Overwrites the projection with the OpenXR
+// runtime's asymmetric per-eye matrix, and returns false when there is no
+// live stereo view - flatscreen, or the menu big screen - leaving the
+// engine's own symmetric matrix in place.
+bool VR_GetVRProjection(int eye, float zNear, float zFar, float* projection);
 void R_Viewport_InitPerspective(r_viewport_t *v, const matrix4x4_t *cameramatrix, int x, int y, int width, int height, float frustumx, float frustumy, float nearclip, float farclip, const float *nearplane)
 {
 	matrix4x4_t tempmatrix, basematrix;
@@ -953,6 +959,7 @@ void R_Viewport_InitPerspective(r_viewport_t *v, const matrix4x4_t *cameramatrix
 		m[12] = -m[12];
 	}
 
+	VR_GetVRProjection(r_stereo_side, nearclip, farclip, m);
 	Matrix4x4_FromArrayFloatGL(&v->projectmatrix, m);
 }
 
@@ -996,6 +1003,7 @@ void R_Viewport_InitPerspectiveInfinite(r_viewport_t *v, const matrix4x4_t *came
 		m[12] = -m[12];
 	}
 
+	VR_GetVRProjection(r_stereo_side, nearclip, (1<<23), m);
 	Matrix4x4_FromArrayFloatGL(&v->projectmatrix, m);
 }
 
@@ -2627,6 +2635,9 @@ void GL_ReadPixelsBGRA(int x, int y, int width, int height, unsigned char *outpi
 void R_Mesh_Start(void)
 {
 	BACKENDACTIVECHECK
+	//Get the current fbo
+	qglGetIntegerv(GL_FRAMEBUFFER_BINDING, &gl_state.defaultframebufferobject);
+
 	R_Mesh_SetRenderTargets(0, NULL, NULL, NULL, NULL, NULL);
 	R_Mesh_SetUseVBO();
 	if (gl_printcheckerror.integer && !gl_paranoid.integer)
