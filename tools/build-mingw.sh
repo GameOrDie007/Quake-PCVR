@@ -48,5 +48,25 @@ make sdl-release -j"$(nproc)" \
 	CFLAGS_EXTRA="-std=gnu99" \
 	"$@"
 
+
+# Everything the binary needs beside it. libstdc++ is here because the OpenXR
+# loader is C++ - without it nothing starts at all, with a Windows dialog
+# rather than anything in the log. The vorbis and ogg pair are loaded by name
+# at run time for the .ogg soundtrack, so they never appear as imports.
+for dll in \
+	SDL2.dll \
+	libgcc_s_seh-1.dll \
+	libwinpthread-1.dll \
+	libstdc++-6.dll \
+	libopenxr_loader.dll \
+	libvorbis-0.dll \
+	libvorbisfile-3.dll \
+	libogg-0.dll
+do
+	if [ -f "/mingw64/bin/$dll" ] && [ "/mingw64/bin/$dll" -nt "./$dll" ]; then
+		cp "/mingw64/bin/$dll" "./$dll"
+	fi
+done
+
 echo
 echo "Built: $(pwd)/darkplaces-sdl.exe"
