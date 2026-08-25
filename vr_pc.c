@@ -491,6 +491,28 @@ qboolean VR_Startup(void)
 	return true;
 }
 
+/*
+	Tear the session down while the GL context it was bound to still exists.
+
+	The swapchain images are GL textures owned by that context, so destroying
+	the context first leaves the runtime holding references to objects that
+	have gone - which on VDXR leaves the process alive and unkillable after
+	Host_Shutdown has otherwise finished. Their build never has to do this:
+	Android tears the whole process down around them.
+
+	Called from VID_Shutdown, which runs inside Host_Shutdown and before the
+	context goes.
+*/
+void VR_Shutdown(void)
+{
+	if (!vr_active)
+		return;
+
+	vr_active = false;
+	TBXR_LeaveVR();
+	Con_Printf("VR: session torn down\n");
+}
+
 void VR_MainLoop(void)
 {
 	if (!vr_active)

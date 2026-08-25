@@ -83,6 +83,10 @@ qboolean VR_Startup(void);
 // Replays anything the instance phase printed before the console existed.
 void VR_FlushEarlyLog(void);
 
+// Destroys the session. Must run before the GL context it was bound to,
+// so VID_Shutdown calls it.
+void VR_Shutdown(void);
+
 // Entered from main() once Host_Init has run. Replaces the loop that stock
 // Host_Main used to own, because their Host_Main now only initialises.
 void VR_MainLoop(void);
