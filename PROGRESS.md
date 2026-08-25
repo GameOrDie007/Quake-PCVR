@@ -1,5 +1,45 @@
 # QuakeQuest -> PCVR: Progress
 
+---
+
+# STATUS: 1:1 PORT COMPLETE - tag `quakequest-vr-1to1`
+
+Verified in the headset on a Quest 3 over Virtual Desktop. Stereo, head
+tracking, world scale, controllers, movement, snap and smooth turning, the
+weapon in hand, shots leaving the gun, the weapon wheel, haptics, the big
+screen for menus and the console, sound, the soundtrack, mods and Dimension
+of the Past all work. 3993x4243 per eye at 72Hz.
+
+## Fidelity, measured
+
+- Their engine changeset applied from the **exact base they forked**,
+  DarkPlaces `a2210a95`, found by hashing all 212 engine files against
+  upstream history. No hand-picking, and no rebase - the step that cost a day
+  on Quake II.
+- **28 files taken wholesale**, LF-normalised and otherwise byte-identical.
+  Their `OpenXrInput.c` came across with only its include line and two
+  logging macros changed.
+- **Every cvar named in either of their configs exists in this build**, with
+  all 24 VR cvars at their exact defaults - the same check that cleared the
+  Quake II port.
+- **Five defects of theirs reproduced deliberately**, listed below, including
+  black blood, which their standalone has too.
+- The whole Android platform half - 700 lines, of which `glquake.h` alone is
+  530 - was identified and dropped rather than ported.
+
+## The package
+
+`tools/package-release.sh` builds `E:\Games\Quake VR (1to1)`: binary,
+run-time DLLs, their shipped config and weapon wheel, the owner's paks, the
+soundtrack, Dimension of the Past and his Quest saves. Config, saves and
+screenshots stay inside the folder.
+
+## Next: the PC branch
+
+Red blood and whatever else is wanted, kept separate from this build exactly
+as Quake II kept `quake2-vr-1to1` and `quake2-vr-pc`.
+
+
 Target: an exact 1:1 port of Team Beef's QuakeQuest (OpenXR VR Quake 1, on
 DarkPlaces) to PCVR, for a Quest 3 over Virtual Desktop (VDXR). Same menus,
 same weapon handling, same defaults. Nothing diverges except what PC requires.
@@ -626,6 +666,31 @@ loaded a moment later. Same null, same cause.
 
 Verified: `-game dopa` loads `dopa/pak0.pak` and `map start` renders;
 `gamedir dopa`, the mods-browser path, loads it too.
+
+## Warnings swept, two kept because they are theirs
+
+After the `FS_CheckGameDir` lesson, every warning class in a full build was
+reviewed rather than left unread. No further `-Wreturn-local-addr` or
+`-Wdangling-pointer` anywhere. The bulk is 2013-era style noise -
+`-Wstrict-prototypes`, `-Wdeclaration-after-statement`,
+`-Wmisleading-indentation` - and the `-Waddress` and `-Wint-in-bool-context`
+hits are all in stock DarkPlaces and all benign.
+
+Two land in code brought across from Team Beef, and both stay, because
+changing them would be a divergence:
+
+- `vr_game.c`, `left_grid = (++left_grid) % 3;` and the same for
+  `right_grid`. Technically undefined - the object is modified and assigned
+  between sequence points - but every compiler produces the obvious result,
+  and it is in the text-entry keyboard.
+- `vr_input.c`, `ALOGV("CreateAction %s, %", actionName, countSubactionPaths)`
+  - a malformed format string with a trailing bare `%` and an argument
+  nothing consumes. A debug line; harmless, since no conversion consumes a
+  vararg.
+
+Together with `r_textshadow 3`, the duplicate `cl_yawspeed` registration and
+the duplicate `menu_reset` command, that is five defects of theirs reproduced
+deliberately.
 
 ## Black blood is theirs, and therefore correct
 
