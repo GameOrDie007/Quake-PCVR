@@ -4237,6 +4237,20 @@ void GL_Main_Init(void)
 		Cvar_RegisterVariable (&gl_skyclip);
 	}
 	Cvar_RegisterVariable(&vr_worldscale);
+	/*
+		PC additions, defined in vr_xr.c and both defaulting to their values.
+		Registered here rather than in the VR layer because that runs after
+		config.cfg has been exec'd, which would discard any saved setting.
+		Declared locally so this engine file need not pull in the OpenXR and
+		Win32 headers.
+	*/
+	{
+		extern cvar_t vr_supersampling;
+		extern cvar_t vr_msaa;
+
+		Cvar_RegisterVariable(&vr_supersampling);
+		Cvar_RegisterVariable(&vr_msaa);
+	}
 	Cvar_RegisterVariable(&r_motionblur);
 	Cvar_RegisterVariable(&r_damageblur);
 	Cvar_RegisterVariable(&r_motionblur_averaging);

@@ -58,6 +58,18 @@ int NUM_MULTI_SAMPLES = 1;
 int REFRESH = 0;
 float SS_MULTIPLIER = 1.3f;
 
+/*
+	PC additions. Both default to their values, so an untouched install
+	renders exactly as the 1:1 build does.
+
+	Theirs are compile-time constants that only their Android commandline.txt
+	could change, which on PC means there is no way to reach them at all.
+	Both are fixed when the eye framebuffers are created, hence "restart to
+	apply".
+*/
+cvar_t vr_supersampling = {CVAR_SAVE, "vr_supersampling", "1.3", "eye buffer size as a multiple of what the runtime recommends - restart to apply"};
+cvar_t vr_msaa = {CVAR_SAVE, "vr_msaa", "1", "multisample samples per pixel in the eye buffer, 1 is off - restart to apply"};
+
 static GLboolean stageSupported = GL_FALSE;
 
 // The desktop mirror. vid_sdl.c publishes the real window size here, because
@@ -720,7 +732,10 @@ static void TBXR_InitialiseResolution(void)
 				gAppState.ViewConfigurationView));
 	}
 
-	// Theirs, including the multiplier and the use of eye 0 for both.
+	// Theirs, including the multiplier and the use of eye 0 for both. The
+	// cvar cannot be read here - this runs before Host_Init, so no cvar
+	// exists yet - so this is the window-sizing estimate and VR_Startup
+	// settles the real figure.
 	gAppState.Width = gAppState.ViewConfigurationView[0].recommendedImageRectWidth * SS_MULTIPLIER;
 	gAppState.Height = gAppState.ViewConfigurationView[0].recommendedImageRectHeight * SS_MULTIPLIER;
 
@@ -987,6 +1002,27 @@ void TBXR_InitRenderer(void)
 
 	if (gAppState.CurrentSpace == XR_NULL_HANDLE)
 		TBXR_Recenter();
+
+	/*
+		Settle the eye buffer size from the cvar now that one exists. Only the
+		eye framebuffers and the engine's idea of its own resolution change;
+		the window and the GL context the session is bound to are untouched,
+		which is why this can happen after xrCreateSession.
+	*/
+	{
+		float ss = bound(0.5f, vr_supersampling.value, 2.0f);
+
+		gAppState.Width = gAppState.ViewConfigurationView[0].recommendedImageRectWidth * ss;
+		gAppState.Height = gAppState.ViewConfigurationView[0].recommendedImageRectHeight * ss;
+
+		NUM_MULTI_SAMPLES = bound(1, vr_msaa.integer, 8);
+
+		vid.width = vid.mode.width = (int)gAppState.Width;
+		vid.height = vid.mode.height = (int)gAppState.Height;
+
+		Con_Printf("VR: %dx%d per eye (x%.2f supersampling), %dx MSAA\n",
+				(int)gAppState.Width, (int)gAppState.Height, ss, NUM_MULTI_SAMPLES);
+	}
 
 	gAppState.Projections = (XrView *)malloc(ovrMaxNumEyes * sizeof(XrView));
 	for (eye = 0; eye < ovrMaxNumEyes; eye++)
