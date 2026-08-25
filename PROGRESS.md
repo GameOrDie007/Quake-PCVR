@@ -197,7 +197,81 @@ Quake II's first attempt.
 Flatscreen stays working through a `vr_enabled` runtime gate: with VR off,
 `CL_UpdateScreen` calls Begin/Draw/End itself, which is what stock did anyway.
 
+---
+
+# Milestone 1 (flatscreen baseline) — complete
+
+Stock DarkPlaces `a2210a95` builds and runs on Windows 11 with the owner's
+registered `id1` data. E1M1 loads and renders correctly: world geometry,
+lighting, HUD and viewmodel all present. Sound initialises, the OGG soundtrack
+libraries load, and the engine shuts down cleanly.
+
+No VR code exists yet, and no Team Beef code has been applied. This is the
+baseline their changeset lands on.
+
+## Toolchain
+
+MSYS2 mingw64, GCC 16.1.0, SDL2 2.32.10, on an RTX 4070 Ti SUPER reporting
+GL 4.6. The engine selects `RENDERPATH_GL20`, which is where their `gl_rmain`
+and `gl_backend` changes live — so the renderer matches from the start.
+
+Build with `tools/build-mingw.sh`. It targets `sdl-release`, and exists mainly
+to carry four decisions that are not obvious:
+
+- **It re-executes itself under MSYS2's own bash.** Git Bash and MSYS2 ship
+  different MSYS runtimes; when a Git Bash process launches an MSYS2 binary the
+  child gets an empty POSIX environment. `TMP` and `TEMP` arrive unset, GCC
+  falls back to `C:\WINDOWS` for scratch files, and every compile and link dies
+  with "Cannot create temporary file ... Permission denied". The sentinel for
+  "already re-executed" is our own variable, not `MSYSTEM` — Git Bash sets
+  `MSYSTEM=MINGW64` too, so testing that silently skips the re-exec.
+- `DP_SOUND_API=SDL`, because the mingw target defaults to DirectSound and
+  wants DirectX SDK headers that modern MinGW does not ship.
+- `SDL_CONFIG=sdl2-config`, since this vintage still looks for `sdl-config`.
+  `vid_sdl.c` itself already handles both SDL 1.2 and SDL 2.
+- `CFLAGS_LIBJPEG=` and `LIB_JPEG=` empty, which restores the runtime dynamic
+  loading every other platform uses instead of the mingw target's hardcoded
+  `-DLINK_TO_LIBJPEG -ljpeg`.
+
+## Four fixes, all toolchain or SDL drift
+
+None of these touch anything Team Beef modified, so none of them cost fidelity.
+
+| where | what | why |
+|---|---|---|
+| build flags | `-std=gnu99` | GCC 14+ defaults to C23, where `true` and `false` are keywords. `qtypes.h` has `typedef enum qboolean_e {false, true} qboolean;` |
+| `dpsoftrast.c` | new `ALIGN_STRUCT`, applied to `DPSOFTRAST_State_Span` and `DPSOFTRAST_State_Triangle` | GCC 14+ refuses an array whose element type is over-aligned but whose size is not a multiple of that alignment. `ALIGN()` puts the attribute on the typedef name, which aligns the type without padding its size — a latent bug that older GCC accepted silently |
+| `vid_sdl.c` | dropped the `SDL_TOUCHBUTTONDOWN`/`SDL_TOUCHBUTTONUP` cases; `SDL_JoystickName` to `SDL_JoystickNameForIndex` | both events existed only in the SDL2 prereleases this code was written against, and both handlers were empty. SDL 2.0.0 changed `SDL_JoystickName` to take the opened joystick |
+| `snd_sdl.c` | `SDL_OpenAudio(&wantspec, NULL)` and copy the spec | SDL2 only converts to the requested format when `obtained` is NULL. Passing non-NULL — the SDL 1.2 convention this was written for — hands back the device's native format, float32 on modern Windows. The engine rejected it, suggested a format that mapped straight back to the same 16-bit request, and retried for ever |
+
+## Running it
+
+The build needs `SDL2.dll` and the two MinGW runtime DLLs beside the exe.
+DarkPlaces loads everything else at runtime by name: `libcurl-4.dll`,
+`zlib1.dll`, and — for the owner's 79MB soundtrack, which is `.ogg` faketracks
+in `id1/sound/cdtracks/` — `libvorbis-0.dll`, `libvorbisfile-3.dll` and
+`libogg-0.dll`. All are present in mingw64 and copied beside the binary.
+
+`run/` holds a test install: `run/id1/` with hard links to the owner's PAK0 and
+PAK1, so his data at `E:\Games\Quest Ports\QuakeQuest` is never written to.
+It is gitignored.
+
+```
+./darkplaces-sdl.exe -basedir run -window -width 800 -height 600
+```
+
+Two notes for later:
+
+- `-condebug` writes `run/id1/qconsole.log`, which is how everything above was
+  checked without a person watching the window.
+- Scripted screenshots need `defer <seconds> screenshot`, not `wait`. `wait`
+  yields one rendered frame, and the whole command buffer drains during map
+  load before the client ever connects, so a `wait`-based script only ever
+  captures the loading plaque.
+
 ## Next
 
-Milestone 1: build stock DarkPlaces `a2210a95` on Windows, unmodified, and
-confirm it runs flatscreen with his `id1` data. No VR code until that works.
+Milestone 2: restore the PC backends they deleted and apply their engine
+changeset, minus the Android platform half. Still no OpenXR — the goal is their
+game logic and their menus running flatscreen, which is what makes the VR layer
+testable afterwards.

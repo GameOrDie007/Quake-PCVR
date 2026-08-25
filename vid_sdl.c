@@ -1022,12 +1022,6 @@ void Sys_SendKeyEvents( void )
 				if (i == MAXFINGERS-1)
 					Con_DPrintf("No SDL_FINGERDOWN event matches this SDL_FINGERMOTION event\n");
 				break;
-			case SDL_TOUCHBUTTONDOWN:
-				// not sure what to do with this...
-				break;
-			case SDL_TOUCHBUTTONUP:
-				// not sure what to do with this...
-				break;
 			default:
 				Con_DPrintf("Received unrecognized SDL_Event type 0x%x\n", event.type);
 				break;
@@ -1695,7 +1689,7 @@ void VID_EnableJoystick(qboolean enable)
 		{
 			vid_sdljoystick = SDL_JoystickOpen(sdlindex);
 			if (vid_sdljoystick)
-				Con_Printf("Joystick %i opened (SDL_Joystick %i is \"%s\" with %i axes, %i buttons, %i balls)\n", index, sdlindex, SDL_JoystickName(sdlindex), (int)SDL_JoystickNumAxes(vid_sdljoystick), (int)SDL_JoystickNumButtons(vid_sdljoystick), (int)SDL_JoystickNumBalls(vid_sdljoystick));
+				Con_Printf("Joystick %i opened (SDL_Joystick %i is \"%s\" with %i axes, %i buttons, %i balls)\n", index, sdlindex, SDL_JoystickNameForIndex(sdlindex), (int)SDL_JoystickNumAxes(vid_sdljoystick), (int)SDL_JoystickNumButtons(vid_sdljoystick), (int)SDL_JoystickNumBalls(vid_sdljoystick));
 			else
 			{
 				Con_Printf("Joystick %i failed (SDL_JoystickOpen(%i) returned: %s)\n", index, sdlindex, SDL_GetError());

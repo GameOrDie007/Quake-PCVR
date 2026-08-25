@@ -65,6 +65,16 @@ typedef qboolean bool;
 #ifndef ALIGN
 #define ALIGN(var) var
 #endif
+// GCC 14 and newer refuse an array whose element type is over-aligned but whose
+// size is not a multiple of that alignment. ALIGN() puts the attribute on the
+// typedef name, which aligns the type without padding its size, so the two
+// types below that are used as arrays need it on the struct as well. MSVC's
+// __declspec(align()) already pads, so this is GNU-only.
+#if defined(SSE_POSSIBLE) && defined(__GNUC__)
+#define ALIGN_STRUCT __attribute__((__aligned__(ALIGN_SIZE)))
+#else
+#define ALIGN_STRUCT
+#endif
 #ifndef ATOMIC
 #define ATOMIC(var) var
 #endif
@@ -176,7 +186,7 @@ typedef ALIGN(struct DPSOFTRAST_State_Triangle_s
 	unsigned char mip[DPSOFTRAST_MAXTEXTUREUNITS]; // texcoord to screen space density values (for picking mipmap of textures)
 	float w[3];
 	ALIGN(float attribs[DPSOFTRAST_ARRAY_TOTAL][3][4]);
-}
+} ALIGN_STRUCT
 DPSOFTRAST_State_Triangle);
 
 #define DPSOFTRAST_CALCATTRIB(triangle, span, data, slope, arrayindex) { \
@@ -208,7 +218,7 @@ typedef ALIGN(struct DPSOFTRAST_State_Span_s
 	unsigned char *pixelmask; // true for pixels that passed depth test, false for others
 	int depthbase; // depthbuffer value at x (add depthslope*startx to get first pixel's depthbuffer value)
 	int depthslope; // depthbuffer value pixel delta
-}
+} ALIGN_STRUCT
 DPSOFTRAST_State_Span);
 
 #define DPSOFTRAST_DRAW_MAXSPANS 1024
