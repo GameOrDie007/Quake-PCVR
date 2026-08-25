@@ -737,7 +737,10 @@ and `quake2-vr-pc` separate.
 
 ---
 
-# The PC branch (`vr-pc`) — built, awaiting headset test
+# The PC branch — complete, tag `quakequest-vr-pc`
+
+Confirmed in the headset: "everything is perfect, toggling the Quake
+particles has blood as red just like it should".
 
 Two installs now, mirroring the Quake II port:
 
@@ -793,10 +796,21 @@ both, through `Lighting: Full` on the Options page and the Video page. The
 DarkPlaces' signature feature and was never affordable on a Quest. Nothing to
 add.
 
-## Next
+## Both builds are done
 
-Headset test of the PC page — in particular whether Particles: Quake gives
-the red blood that started this.
+Nothing outstanding. The two installs are self-contained and carry the
+owner's paks, soundtrack, Dimension of the Past and his Quest saves; config,
+saves and screenshots live inside each folder, so backing one up backs up
+everything and copying it to another PC carries the settings.
+
+`cl_particles_quake` is archived, so his choice of Quake particles persists
+without touching the default - which stays at theirs, keeping an untouched
+install identical to the 1:1 build.
+
+If a future session wants more: the Quake II port's remaining ideas were a
+systematic side-by-side against the standalone, and the observation that
+brightness differences through Virtual Desktop are VD's encode path rather
+than anything the engine can fix. Both apply here.
 - Systematic comparison against the standalone, which is what the Quake II
   port found most of its remaining fidelity gaps with.
 - Tag once mods are settled.
