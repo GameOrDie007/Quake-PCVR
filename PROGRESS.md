@@ -636,9 +636,53 @@ unnoticed until packaging. What is lost is Dimension of the Past and any other
 mod. The packaged folder ships `dopa/` ready to go, but no launcher for it,
 rather than shipping something that does not work.
 
+## Black blood is theirs, and therefore correct
+
+Blood particles and the blood stains they leave both render black rather than
+red. The owner checked it three ways:
+
+- a normal Quake build: **red**
+- this port: **black**
+- **Team Beef's standalone QuakeQuest on the Quest: also black**
+
+So this port is reproducing their behaviour faithfully, which for a 1:1 port
+is the right outcome. Left alone.
+
+Worth recording for whoever wants to fix it as a PC extra, because the
+mechanism is not obvious. DarkPlaces draws blood - particles and decals alike
+- with `PBLEND_INVMOD`, an inverse-modulate blend: `GL_ZERO,
+GL_ONE_MINUS_SRC_COLOR`. The particle's vertex colour is plain white
+(`0xFFFFFF`), so **all** of the redness comes from the texture, which
+`R_InitBloodTextures` generates by drawing dark red blotches onto white and
+then inverting - giving a cyan-ish sprite whose inverse is red. Black output
+therefore means the sprite is arriving white, not that a colour is wrong
+somewhere.
+
+Two candidates were checked and eliminated:
+
+- `r_hdr_scenebrightness`, which they raise from 1 to 1.4. It reaches
+  particles through `colormultiplier`, but the `PBLEND_INVMOD` branch is the
+  one case that does **not** use it, so it cannot be the cause.
+- Anything in their `gl_rmain.c`. Diffing it against stock shows no change to
+  `R_SetupShader_Generic`, which is what binds the particle texture.
+
+The remaining suspicion, untested, is the `GL_MODULATE` texture mode that
+`R_SetupShader_Generic` is called with for particles: their build runs
+`RENDERPATH_GLES2`, where fixed-function texture environment modes do not
+exist and are emulated by shader permutation. If that path drops the texture
+and leaves white, INVMOD would give exactly this. That would make it a
+DarkPlaces-on-GLES2 defect that Team Beef inherited rather than a choice - and
+it would mean the fix on PC is small, since we run `RENDERPATH_GL20` and could
+plausibly just work if the permutation were selected correctly.
+
+**Fixing it would be a divergence from their build**, so it belongs on a PC
+extras branch if wanted, exactly as the Quake II port kept `quake2-vr-1to1`
+and `quake2-vr-pc` separate.
+
 ## Next
 
 - Root-cause `listdirectory` / `FS_CheckGameDir` so mods and dopa work.
+- Optionally, red blood as a PC extra - see above. Not a port fix.
 - Systematic comparison against the standalone, which is what the Quake II
   port found most of its remaining fidelity gaps with.
 - Tag once mods are settled.
