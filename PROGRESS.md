@@ -544,9 +544,101 @@ and a clean teardown, and `-novr` still loads and renders flatscreen.
 
 Whether the mappings *feel* right is a headset question.
 
+## Confirmed in the headset (2026-08-25)
+
+Owner's verdict: "everything seems to be working as intended". Weapon in hand,
+shots from the gun, movement, turning, the weapon wheel, haptics and buttons
+all correct.
+
+**The port is functionally complete.**
+
+---
+
+# Milestone 4 (fidelity and packaging)
+
+## Cvar fidelity, measured
+
+The build registers **1,299 cvars**, and **every cvar named in either of their
+configs exists in it** — their shipped `assets/config.cfg` and the owner's own
+`config.cfg` off the Quest. That is the same check the Quake II port used to
+conclude no VR option was missing.
+
+All 24 VR cvars are present at their exact defaults: `vr_worldscale` 26.2467,
+`vr_yawmode` 1, `cl_movementspeed` 170, `cl_comfort` 45, `cl_trackingmode` 1,
+`cl_righthanded` 1, `cl_walkdirection` 1, `cl_weaponoffset` 0.4,
+`vr_weaponpitchadjust` -20, `r_lasersight` 2, and the ten `vr_weaponwheel_*`.
+
+Diffing every file that was deliberately **kept stock** for their cvar changes
+turned up exactly one: `gl_nopartialtextureupdates`, which they default to 1
+and stock defaults to 0. It is a driver workaround for dynamic lightmap
+uploads and changes nothing visually, but PC does not *require* 0, and the
+brief is that nothing diverges without reason — so it now matches theirs.
+
+## Packaging
+
+`tools/package-release.sh <dir>` builds a self-contained, playable install.
+The default is `E:\Games\Quake VR (1to1)`, mirroring the Quake II port's
+convention.
+
+It carries the binary and every DLL it loads, their shipped `config.cfg` (only
+if absent, since the engine rewrites it) and `weaponwheel.json`, the owner's
+paks, the 79MB soundtrack, Dimension of the Past, and his saves off the Quest.
+Paks and soundtrack are hard linked — 170MB that is never written to — while
+saves are **copied**, because the game rewrites them and the Quest-side
+originals must not change underneath him. Config, saves and screenshots land
+inside the folder, so backing it up backs up everything.
+
+## Open: gamedir switching is broken, and it is not ours
+
+Selecting a mod fails. Both routes give the same result:
+
+```
+Quake Error: Nasty -game name rejected: dopa
+```
+
+- `-game dopa` on the command line, and
+- the `gamedir dopa` console command, which is what the in-game mods browser
+  uses — so that is broken too.
+
+**Reproduced on stock DarkPlaces built from the milestone 1 commit**, before a
+single line of Team Beef's code. So it is a pre-existing incompatibility
+between 2013 DarkPlaces and this toolchain or a modern Windows, not something
+this port introduced. That is the important part; the rest is what was
+established while chasing it.
+
+What is known:
+
+- `FS_CheckGameDir` returns NULL. Reading the function, the **only** `return
+  NULL` is the `FS_CheckNastyPath` guard.
+- Instrumenting that guard shows it returns **0** for `"dopa"` — 4 bytes,
+  `64 6f 70 61`, no dot, nothing nasty — and the "-> NULL (nasty)" branch is
+  demonstrably not taken.
+- The caller nonetheless sees `p = 0x0000000000000000`, while
+  `fs_checkgamedir_missing` is a healthy pointer, so the sentinel is not
+  corrupted.
+- Identical at `-O0`, so not a codegen artefact of `-O3`.
+- Only one definition of `FS_CheckGameDir` links (`nm` over every object).
+
+In short, the function returns NULL through a path the source does not
+contain. Not explained.
+
+One strong lead for whoever picks this up: with `fs_userdir` empty,
+`FS_ListGameDirs` calls `listdirectory(&list, "/", "")`, whose Win32
+implementation builds the pattern `"/*"` and enumerates **the root of the
+current drive**. The trace shows it walking `$recycle.bin`, `nvidia
+corporation`, `system volume information` and so on, calling `FS_CheckGameDir`
+on each. Relatedly, `WARNING: base gamedir ./id1/ not found!` is printed even
+though `id1` is right there and its paks load a moment later — so
+`listdirectory` is also failing on paths that plainly exist. Start there.
+
+Scope: **`id1` — the actual game — is unaffected**, which is why this went
+unnoticed until packaging. What is lost is Dimension of the Past and any other
+mod. The packaged folder ships `dopa/` ready to go, but no launcher for it,
+rather than shipping something that does not work.
+
 ## Next
 
-Headset test of 3b. Then: the deferred items from 3a — graceful shutdown
-through their `QC_exit` path rather than relying on `VID_Shutdown` — and a
-systematic comparison against the standalone, which is what the Quake II port
-found most of its remaining fidelity gaps with.
+- Root-cause `listdirectory` / `FS_CheckGameDir` so mods and dopa work.
+- Systematic comparison against the standalone, which is what the Quake II
+  port found most of its remaining fidelity gaps with.
+- Tag once mods are settled.
