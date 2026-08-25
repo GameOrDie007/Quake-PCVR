@@ -34,6 +34,7 @@ enum m_state_e {
 	m_setup,
 	m_options,
 	m_video,
+	m_controller,
 	m_keys,
 	m_help,
 	m_credits,

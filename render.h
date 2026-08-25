@@ -125,7 +125,7 @@ extern cvar_t r_dynamic;
 
 void R_Init(void);
 void R_UpdateVariables(void); // must call after setting up most of r_refdef, but before calling R_RenderView
-void R_RenderView(void); // must set r_refdef and call R_UpdateVariables first
+void R_RenderView(); // must set r_refdef and call R_UpdateVariables first
 void R_RenderView_UpdateViewVectors(void); // just updates r_refdef.view.{forward,left,up,origin,right,inverse_matrix}
 
 typedef enum r_refdef_scene_type_s {
@@ -613,6 +613,7 @@ void R_Shadow_EditLights_DrawSelectedLightProperties(void);
 void R_DecalSystem_Reset(decalsystem_t *decalsystem);
 void R_Shadow_UpdateBounceGridTexture(void);
 void R_DrawLightningBeams(void);
+void R_DrawLaserSights(void);
 void VM_CL_AddPolygonsToMeshQueue(struct prvm_prog_s *prog);
 void R_DrawPortals(void);
 void R_DrawModelShadows(int fbo, rtexture_t *depthtexture, rtexture_t *colortexture);
@@ -637,7 +638,29 @@ void R_Explosion_Init(void);
 void gl_backend_init(void);
 void Sbar_Init(void);
 void R_LightningBeams_Init(void);
+void R_LaserSights_Init(void);
 void Mod_RenderInit(void);
+
+// Console units that a view centred 2D element must move to correct for the
+// asymmetric eye frustum the OpenXR runtime reports. Both are 0 on the big screen.
+void GetHUDOffset(float *x, float *y);
+
+// r_weaponwheel.c
+void R_WeaponWheel_Init(void);
+void R_DrawWeaponWheel(void);
+void R_WeaponWheel_DrawText(void);
+qboolean CL_WeaponWheel_CanOpen(void);
+void CL_WeaponWheel_Open(void);
+void CL_WeaponWheel_Close(void);
+void CL_WeaponWheel_Select(void);
+void CL_WeaponWheel_Relink(void);
+extern int weaponwheel_active;
+extern float weaponwheel_angles[3];
+extern float weaponwheel_cursor[2];
+extern int weaponwheel_selection;
+extern cvar_t vr_weaponwheel;
+extern cvar_t vr_weaponwheel_deflection;
+
 void Font_Init(void);
 
 qboolean R_CompileShader_CheckStaticParms(void);

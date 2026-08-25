@@ -56,6 +56,8 @@ cvar_t m_side = {CVAR_SAVE, "m_side","0.8","mouse side speed multiplier"};
 
 cvar_t freelook = {CVAR_SAVE, "freelook", "1","mouse controls pitch instead of forward/back"};
 
+cvar_t cl_nosplashscreen = {CVAR_SAVE, "cl_nosplashscreen", "0", "prevents the credits splashscreen from being displayed on game start" };
+
 cvar_t cl_autodemo = {CVAR_SAVE, "cl_autodemo", "0", "records every game played, using the date/time and map name to name the demo file" };
 cvar_t cl_autodemo_nameformat = {CVAR_SAVE, "cl_autodemo_nameformat", "autodemos/%Y-%m-%d_%H-%M", "The format of the cl_autodemo filename, followed by the map name (the date is encoded using strftime escapes)" };
 cvar_t cl_autodemo_delete = {0, "cl_autodemo_delete", "0", "Delete demos after recording.  This is a bitmask, bit 1 gives the default, bit 0 the value for the current demo.  Thus, the values are: 0 = disabled; 1 = delete current demo only; 2 = delete all demos except the current demo; 3 = delete all demos from now on" };
@@ -339,6 +341,9 @@ void CL_Disconnect(void)
 	Curl_Clear_forthismap();
 
 	Con_DPrintf("CL_Disconnect\n");
+
+	// a level change with the grip held must not leave the game in slow motion
+	CL_WeaponWheel_Close();
 
     Cvar_SetValueQuick(&csqc_progcrc, -1);
 	Cvar_SetValueQuick(&csqc_progsize, -1);
@@ -1366,6 +1371,8 @@ static void CL_UpdateViewModel(void)
 	ent->state_current.flags = RENDER_VIEWMODEL;
 	if ((cl.stats[STAT_HEALTH] <= 0 && cl_deathnoviewmodel.integer) || cl.intermission)
 		ent->state_current.modelindex = 0;
+	else if (weaponwheel_active)
+		ent->state_current.modelindex = 0;	// the wheel replaces the held weapon
 	else if (cl.stats[STAT_ITEMS] & IT_INVISIBILITY)
 	{
 		if (gamemode == GAME_TRANSFUSION)
@@ -1693,6 +1700,13 @@ static void CL_RelinkEffects(void)
 	}
 }
 
+
+extern float gunangles[3];
+extern float gunorg[3];
+extern float vieworg[3];
+extern cvar_t vr_worldscale;
+extern cvar_t cl_trackingmode;
+
 void CL_Beam_CalculatePositions(const beam_t *b, vec3_t start, vec3_t end)
 {
 	VectorCopy(b->start, start);
@@ -1711,6 +1725,15 @@ void CL_Beam_CalculatePositions(const beam_t *b, vec3_t start, vec3_t end)
 			// only applies to your own lightning, and only in first person
 			Matrix4x4_OriginFromMatrix(&cl.entities[cl.viewentity].render.matrix, start);
 		}
+
+		//Use gun location as beam origin
+        VectorCopy(gunorg, start);
+
+        if (cl_trackingmode.integer == 0) //3DoF
+        {
+            start[2] -= 5.0f; // Hack to align lightning with gun
+        }
+
 		if (cl_beams_instantaimhack.integer)
 		{
 			vec3_t dir, localend;
@@ -1724,6 +1747,55 @@ void CL_Beam_CalculatePositions(const beam_t *b, vec3_t start, vec3_t end)
 			Matrix4x4_Transform(&r_refdef.view.matrix, localend, end);
 		}
 	}
+}
+
+
+void CL_LaserSight_CalculatePositions(vec3_t start, vec3_t end)
+{
+    vec3_t temp;
+    trace_t trace;
+
+    matrix4x4_t gunOrientationMatrix;
+    Matrix4x4_CreateFromQuakeEntity(&gunOrientationMatrix, gunorg[0], gunorg[1], gunorg[2], gunangles[0], gunangles[1], gunangles[2], 1.0f);
+
+    VectorSet(temp, 65536, 0, 0);
+    Matrix4x4_Transform(&gunOrientationMatrix, temp, end);
+    trace = CL_TraceLine(gunorg, end, MOVE_NORMAL, NULL, SUPERCONTENTS_SOLID, true, false, NULL, true, true);
+
+    VectorCopy(trace.endpos, end);
+    VectorCopy(gunorg, start);
+}
+
+extern cvar_t r_lasersight;
+void CL_LaserSight_SetupTorch()
+{
+    qboolean cldead = (cl.stats[STAT_HEALTH] <= 0 && cl.stats[STAT_HEALTH] != -666 && cl.stats[STAT_HEALTH] != -2342);
+    int activeWeapon = cl.stats[STAT_ACTIVEWEAPON];
+    if (!cl.intermission && !cls.demoplayback && r_lasersight.integer == 2 && !cldead && activeWeapon != IT_AXE && activeWeapon != IT_GRENADE_LAUNCHER)
+    {
+        vec3_t org, start, end, dir;
+        vec_t dist;
+        CL_LaserSight_CalculatePositions(start, end);
+
+        // calculate the nearest point on the line (beam) for depth sorting
+        VectorSubtract(end, start, dir);
+        dist = (DotProduct(r_refdef.view.origin, dir) - DotProduct(start, dir)) / (DotProduct(end, dir) - DotProduct(start, dir));
+        dist = bound(0, dist, 1);
+        VectorLerp(start, dist, end, org);
+
+        //Torch
+        if (r_refdef.scene.numlights < MAX_DLIGHTS) {
+            vec3_t dlightcolor;
+            matrix4x4_t tempmatrix;
+            VectorSet(dlightcolor, 3.2, 3.7, 4);
+            Matrix4x4_CreateFromQuakeEntity(&tempmatrix, end[0], end[1], end[2], 0, 0, 0, 8);
+            R_RTLight_Update(&r_refdef.scene.templights[r_refdef.scene.numlights], false,
+                             &tempmatrix, dlightcolor, -1, NULL, true, 1, 0.5, 1, 0, 0,
+                             LIGHTFLAG_NORMALMODE | LIGHTFLAG_REALTIMEMODE);
+            r_refdef.scene.lights[r_refdef.scene.numlights] = &r_refdef.scene.templights[r_refdef.scene.numlights];
+            r_refdef.scene.numlights++;
+        }
+    }
 }
 
 void CL_RelinkBeams(void)
@@ -1870,8 +1942,9 @@ void CSQC_RelinkAllEntities (int drawmask)
 	// link stuff
 	CL_RelinkWorld();
 	CL_RelinkStaticEntities();
-	CL_RelinkBeams();
+    CL_RelinkBeams();
 	CL_RelinkEffects();
+    CL_LaserSight_SetupTorch();
 
 	// link stuff
 	if (drawmask & ENTMASK_ENGINE)
@@ -1934,6 +2007,8 @@ void CL_UpdateWorld(void)
 
 		CL_RelinkLightFlashes();
 		CSQC_RelinkAllEntities(ENTMASK_ENGINE | ENTMASK_ENGINEVIEWMODELS);
+
+		CL_WeaponWheel_Relink();
 
 		// decals, particles, and explosions will be updated during rneder
 	}
@@ -2029,7 +2104,9 @@ static void CL_TimeRefresh_f (void)
 	{
 		Matrix4x4_CreateFromQuakeEntity(&r_refdef.view.matrix, r_refdef.view.origin[0], r_refdef.view.origin[1], r_refdef.view.origin[2], 0, i / 128.0 * 360.0, 0, 1);
 		r_refdef.view.quality = 1;
-		CL_UpdateScreen();
+		CL_BeginUpdateScreen();
+		SCR_DrawScreen(0, 0);
+		CL_EndUpdateScreen();
 	}
 	timedelta = Sys_DirtyTime() - timestart;
 
@@ -2399,9 +2476,7 @@ void CL_Init (void)
 // register our commands
 //
 	Cvar_RegisterVariable (&cl_upspeed);
-	Cvar_RegisterVariable (&cl_forwardspeed);
-	Cvar_RegisterVariable (&cl_backspeed);
-	Cvar_RegisterVariable (&cl_sidespeed);
+	Cvar_RegisterVariable (&cl_movementspeed);
 	Cvar_RegisterVariable (&cl_movespeedkey);
 	Cvar_RegisterVariable (&cl_yawspeed);
 	Cvar_RegisterVariable (&cl_pitchspeed);
@@ -2436,6 +2511,9 @@ void CL_Init (void)
 	Cmd_AddCommand ("cl_modelindexlist", CL_ModelIndexList_f, "list information on all models in the client modelindex");
 	// Support Client-side Sound Index List
 	Cmd_AddCommand ("cl_soundindexlist", CL_SoundIndexList_f, "list all sounds in the client soundindex");
+
+
+	Cvar_RegisterVariable (&cl_nosplashscreen);
 
 	Cvar_RegisterVariable (&cl_autodemo);
 	Cvar_RegisterVariable (&cl_autodemo_nameformat);

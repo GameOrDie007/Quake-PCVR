@@ -651,8 +651,8 @@ void IN_Move( void )
 #endif
 			break;
 		}
-		cl.cmd.forwardmove -= move[1] * cl_forwardspeed.value;
-		cl.cmd.sidemove += move[0] * cl_sidespeed.value;
+		cl.cmd.forwardmove -= move[1] * cl_movementspeed.value;
+		cl.cmd.sidemove += move[0] * cl_movementspeed.value;
 		cl.viewangles[0] += aim[1] * cl_pitchspeed.value * cl.realframetime;
 		cl.viewangles[1] -= aim[0] * cl_yawspeed.value * cl.realframetime;
 	}

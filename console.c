@@ -53,7 +53,7 @@ cvar_t con_chatrect = {CVAR_SAVE, "con_chatrect","0", "use con_chatrect_x and _y
 cvar_t con_chatrect_x = {CVAR_SAVE, "con_chatrect_x","", "where to put chat, relative x coordinate of left edge on screen (use con_chatwidth for width)"};
 cvar_t con_chatrect_y = {CVAR_SAVE, "con_chatrect_y","", "where to put chat, relative y coordinate of top edge on screen (use con_chat for line count)"};
 cvar_t con_chatwidth = {CVAR_SAVE, "con_chatwidth","1.0", "relative chat window width"};
-cvar_t con_textsize = {CVAR_SAVE, "con_textsize","8", "console text size in virtual 2D pixels"};
+cvar_t con_textsize = {CVAR_SAVE, "con_textsize","12", "console text size in virtual 2D pixels"};
 cvar_t con_notifysize = {CVAR_SAVE, "con_notifysize","8", "notify text size in virtual 2D pixels"};
 cvar_t con_chatsize = {CVAR_SAVE, "con_chatsize","8", "chat text size in virtual 2D pixels (if con_chat is enabled)"};
 cvar_t con_chatsound = {CVAR_SAVE, "con_chatsound","1", "enables chat sound to play on message"};
@@ -89,6 +89,8 @@ int con_linewidth;
 int con_vislines;
 
 qboolean con_initialized;
+
+extern void BigScreenMode(int mode);
 
 // used for server replies to rcon command
 lhnetsocket_t *rcon_redirect_sock = NULL;
@@ -578,6 +580,9 @@ void Con_ToggleConsole_f (void)
 
 	// toggle the 'user wants console' bit
 	key_consoleactive ^= KEY_CONSOLEACTIVE_USER;
+
+	BigScreenMode(key_consoleactive > 0 ? 1 : 0);
+
 	Con_ClearNotify();
 }
 

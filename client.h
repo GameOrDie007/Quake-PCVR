@@ -1114,6 +1114,9 @@ typedef struct client_state_s
 // the view is temporarily offset, and an angle reset commands at the start
 // of each level and after teleporting.
 
+	//The increments for comfort mode
+	int comfortInc;
+
 	// mviewangles is read from demo
 	// viewangles is either client controlled or lerped from mviewangles
 	vec3_t mviewangles[2], viewangles;
@@ -1480,14 +1483,17 @@ extern cvar_t rcon_password;
 extern cvar_t rcon_address;
 
 extern cvar_t cl_upspeed;
-extern cvar_t cl_forwardspeed;
-extern cvar_t cl_backspeed;
-extern cvar_t cl_sidespeed;
+extern cvar_t cl_movementspeed;
 
 extern cvar_t cl_movespeedkey;
 
+extern cvar_t vr_yawmode;
+extern cvar_t cl_comfort;
 extern cvar_t cl_yawspeed;
 extern cvar_t cl_pitchspeed;
+extern cvar_t cl_yawmult;
+extern cvar_t cl_pitchmult;
+extern qboolean headtracking;
 
 extern cvar_t cl_anglespeedkey;
 
@@ -1579,6 +1585,7 @@ void CL_ParseTEnt (void);
 void CL_NewBeam (int ent, vec3_t start, vec3_t end, dp_model_t *m, int lightning);
 void CL_RelinkBeams (void);
 void CL_Beam_CalculatePositions (const beam_t *b, vec3_t start, vec3_t end);
+void CL_LaserSight_CalculatePositions(vec3_t start, vec3_t end);
 void CL_ClientMovement_Replay(void);
 
 void CL_ClearTempEntities (void);

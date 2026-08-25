@@ -18,7 +18,10 @@ extern cvar_t scr_screenshot_name;
 void CL_Screen_NewMap(void);
 void CL_Screen_Init(void);
 void CL_Screen_Shutdown(void);
-void CL_UpdateScreen(void);
+void CL_BeginUpdateScreen();
+void CL_EndUpdateScreen();
+
+void SCR_DrawScreen ();
 
 qboolean R_Stereo_Active(void);
 qboolean R_Stereo_ColorMasking(void);

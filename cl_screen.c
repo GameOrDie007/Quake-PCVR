@@ -1,5 +1,6 @@
 
 #include "quakedef.h"
+#include <stdbool.h>
 #include "cl_video.h"
 #include "image.h"
 #include "jpeg.h"
@@ -14,12 +15,11 @@
 #include "snd_main.h"
 
 cvar_t scr_viewsize = {CVAR_SAVE, "viewsize","100", "how large the view should be, 110 disables inventory bar, 120 disables status bar"};
-cvar_t scr_fov = {CVAR_SAVE, "fov","90", "field of vision, 1-170 degrees, default 90, some players use 110-130"};
-cvar_t scr_conalpha = {CVAR_SAVE, "scr_conalpha", "1", "opacity of console background gfx/conback"};
+cvar_t scr_conalpha = {CVAR_SAVE, "scr_conalpha", "0.85", "opacity of console background gfx/conback"};
 cvar_t scr_conalphafactor = {CVAR_SAVE, "scr_conalphafactor", "1", "opacity of console background gfx/conback relative to scr_conalpha; when 0, gfx/conback is not drawn"};
 cvar_t scr_conalpha2factor = {CVAR_SAVE, "scr_conalpha2factor", "0", "opacity of console background gfx/conback2 relative to scr_conalpha; when 0, gfx/conback2 is not drawn"};
 cvar_t scr_conalpha3factor = {CVAR_SAVE, "scr_conalpha3factor", "0", "opacity of console background gfx/conback3 relative to scr_conalpha; when 0, gfx/conback3 is not drawn"};
-cvar_t scr_conbrightness = {CVAR_SAVE, "scr_conbrightness", "1", "brightness of console background (0 = black, 1 = image)"};
+cvar_t scr_conbrightness = {CVAR_SAVE, "scr_conbrightness", "0", "brightness of console background (0 = black, 1 = image)"};
 cvar_t scr_conforcewhiledisconnected = {0, "scr_conforcewhiledisconnected", "1", "forces fullscreen console while disconnected"};
 cvar_t scr_conscroll_x = {CVAR_SAVE, "scr_conscroll_x", "0", "scroll speed of gfx/conback in x direction"};
 cvar_t scr_conscroll_y = {CVAR_SAVE, "scr_conscroll_y", "0", "scroll speed of gfx/conback in y direction"};
@@ -28,9 +28,9 @@ cvar_t scr_conscroll2_y = {CVAR_SAVE, "scr_conscroll2_y", "0", "scroll speed of 
 cvar_t scr_conscroll3_x = {CVAR_SAVE, "scr_conscroll3_x", "0", "scroll speed of gfx/conback3 in x direction"};
 cvar_t scr_conscroll3_y = {CVAR_SAVE, "scr_conscroll3_y", "0", "scroll speed of gfx/conback3 in y direction"};
 cvar_t scr_menuforcewhiledisconnected = {0, "scr_menuforcewhiledisconnected", "0", "forces menu while disconnected"};
-cvar_t scr_centertime = {0, "scr_centertime","2", "how long centerprint messages show"};
+cvar_t scr_centertime = {0, "scr_centertime","4", "how long centerprint messages show"};
 cvar_t scr_showram = {CVAR_SAVE, "showram","1", "show ram icon if low on surface cache memory (not used)"};
-cvar_t scr_showturtle = {CVAR_SAVE, "showturtle","0", "show turtle icon when framerate is too low"};
+cvar_t scr_showturtle = {CVAR_SAVE, "showturtle","1", "show turtle icon when framerate is too low"};
 cvar_t scr_showpause = {CVAR_SAVE, "showpause","1", "show pause icon when game is paused"};
 cvar_t scr_showbrand = {0, "showbrand","0", "shows gfx/brand.tga in a corner of the screen (different values select different positions, including centered)"};
 cvar_t scr_printspeed = {0, "scr_printspeed","0", "speed of intermission printing (episode end texts), a value of 0 disables the slow printing"};
@@ -68,13 +68,6 @@ cvar_t cl_capturevideo_number = {CVAR_SAVE, "cl_capturevideo_number", "1", "numb
 cvar_t cl_capturevideo_ogg = {CVAR_SAVE, "cl_capturevideo_ogg", "1", "save captured video data as Ogg/Vorbis/Theora streams"};
 cvar_t cl_capturevideo_framestep = {CVAR_SAVE, "cl_capturevideo_framestep", "1", "when set to n >= 1, render n frames to capture one (useful for motion blur like effects)"};
 cvar_t r_letterbox = {0, "r_letterbox", "0", "reduces vertical height of view to simulate a letterboxed movie effect (can be used by mods for cutscenes)"};
-cvar_t r_stereo_separation = {0, "r_stereo_separation", "4", "separation distance of eyes in the world (negative values are only useful for cross-eyed viewing)"};
-cvar_t r_stereo_sidebyside = {0, "r_stereo_sidebyside", "0", "side by side views for those who can't afford glasses but can afford eye strain (note: use a negative r_stereo_separation if you want cross-eyed viewing)"};
-cvar_t r_stereo_horizontal = {0, "r_stereo_horizontal", "0", "aspect skewed side by side view for special decoder/display hardware"};
-cvar_t r_stereo_vertical = {0, "r_stereo_vertical", "0", "aspect skewed top and bottom view for special decoder/display hardware"};
-cvar_t r_stereo_redblue = {0, "r_stereo_redblue", "0", "red/blue anaglyph stereo glasses (note: most of these glasses are actually red/cyan, try that one too)"};
-cvar_t r_stereo_redcyan = {0, "r_stereo_redcyan", "0", "red/cyan anaglyph stereo glasses, the kind given away at drive-in movies like Creature From The Black Lagoon In 3D"};
-cvar_t r_stereo_redgreen = {0, "r_stereo_redgreen", "0", "red/green anaglyph stereo glasses (for those who don't mind yellow)"};
 cvar_t r_stereo_angle = {0, "r_stereo_angle", "0", "separation angle of eyes (makes the views look different directions, as an example, 90 gives a 90 degree separation where the views are 45 degrees left and 45 degrees right)"};
 cvar_t scr_stipple = {0, "scr_stipple", "0", "interlacing-like stippling of the display"};
 cvar_t scr_refresh = {0, "scr_refresh", "1", "allows you to completely shut off rendering for benchmarking purposes"};
@@ -119,6 +112,9 @@ int			scr_con_margin_bottom;
 
 extern int	con_vislines;
 
+extern void BigScreenMode(int mode);
+
+
 static void SCR_ScreenShot_f (void);
 static void R_Envmap_f (void);
 
@@ -152,7 +148,19 @@ for a few moments
 */
 void SCR_CenterPrint(const char *str)
 {
-	strlcpy (scr_centerstring, str, sizeof (scr_centerstring));
+	//Check to see if this is the shareware message, if so, replace with a more up to date
+	//relevant one
+	if (strstr(str, "1-800"))
+	{
+		char tempstr[] = "This episode isn't availble in the Shareware version\n"
+			"You can buy the full game of Quake for $10 on Steam:\n"
+				"http://store.steampowered.com/app/2310/";
+		strlcpy(scr_centerstring, tempstr, sizeof(scr_centerstring));
+	}
+	else {
+		strlcpy(scr_centerstring, str, sizeof(scr_centerstring));
+	}
+
 	scr_centertime_off = scr_centertime.value;
 	scr_centertime_start = cl.time;
 
@@ -173,6 +181,7 @@ static void SCR_DrawCenterString (void)
 	int		x, y;
 	int		remaining;
 	int		color;
+	float	hudOffsetX, hudOffsetY;
 
 	if(cl.intermission == 2) // in finale,
 		if(sb_showscores) // make TAB hide the finale message (sb_showscores overrides finale in sbar.c)
@@ -193,10 +202,10 @@ static void SCR_DrawCenterString (void)
 	if (remaining < 1)
 		return;
 
-	if (scr_center_lines <= 4)
-		y = (int)(vid_conheight.integer*0.35);
-	else
-		y = 48;
+	GetHUDOffset(&hudOffsetX, &hudOffsetY);
+
+	//Lowered to be visible in the GVR
+	y = (int)(vid_conheight.integer*0.5 + hudOffsetY);
 
 	color = -1;
 	do
@@ -206,7 +215,7 @@ static void SCR_DrawCenterString (void)
 		int l = newline ? (newline - start) : (int)strlen(start);
 		float width = DrawQ_TextWidth(start, l, 8, 8, false, FONT_CENTERPRINT);
 
-		x = (int) (vid_conwidth.integer - width)/2;
+		x = (int) ((vid_conwidth.integer - width)/2 + (r_stereo_side == 0 ? 10 : -10) + hudOffsetX);
 		if (l > 0)
 		{
 			if (remaining < l)
@@ -614,7 +623,7 @@ SCR_DrawInfobar
 */
 static void SCR_DrawInfobar(void)
 {
-	int offset = 0;
+	int offset = 30;
 	offset += SCR_DrawQWDownload(offset);
 	offset += SCR_DrawCurlDownload(offset);
 	if(scr_infobartime_off > 0)
@@ -717,11 +726,15 @@ void SCR_DrawConsole (void)
 	{
 		// full screen
 		Con_DrawConsole (vid_conheight.integer - scr_con_margin_bottom);
+		BigScreenMode(1);
 	}
-	else if (scr_con_current)
-		Con_DrawConsole (min((int)scr_con_current, vid_conheight.integer - scr_con_margin_bottom));
-	else
+	else if (scr_con_current) {
+		Con_DrawConsole(min((int) scr_con_current, vid_conheight.integer - scr_con_margin_bottom));
+		BigScreenMode(1);
+	}
+	else {
 		con_vislines = 0;
+	}
 }
 
 /*
@@ -1294,7 +1307,6 @@ void CL_Screen_Shutdown(void)
 void CL_Screen_Init(void)
 {
 	int i;
-	Cvar_RegisterVariable (&scr_fov);
 	Cvar_RegisterVariable (&scr_viewsize);
 	Cvar_RegisterVariable (&scr_conalpha);
 	Cvar_RegisterVariable (&scr_conalphafactor);
@@ -1349,13 +1361,6 @@ void CL_Screen_Init(void)
 	Cvar_RegisterVariable (&cl_capturevideo_ogg);
 	Cvar_RegisterVariable (&cl_capturevideo_framestep);
 	Cvar_RegisterVariable (&r_letterbox);
-	Cvar_RegisterVariable(&r_stereo_separation);
-	Cvar_RegisterVariable(&r_stereo_sidebyside);
-	Cvar_RegisterVariable(&r_stereo_horizontal);
-	Cvar_RegisterVariable(&r_stereo_vertical);
-	Cvar_RegisterVariable(&r_stereo_redblue);
-	Cvar_RegisterVariable(&r_stereo_redcyan);
-	Cvar_RegisterVariable(&r_stereo_redgreen);
 	Cvar_RegisterVariable(&r_stereo_angle);
 	Cvar_RegisterVariable(&scr_stipple);
 	Cvar_RegisterVariable(&scr_refresh);
@@ -1378,8 +1383,8 @@ void CL_Screen_Init(void)
 	if (COM_CheckParm ("-noconsole"))
 		Cvar_SetQuick(&scr_conforcewhiledisconnected, "0");
 
-	Cmd_AddCommand ("sizeup",SCR_SizeUp_f, "increase view size (increases viewsize cvar)");
-	Cmd_AddCommand ("sizedown",SCR_SizeDown_f, "decrease view size (decreases viewsize cvar)");
+//	Cmd_AddCommand ("sizeup",SCR_SizeUp_f, "increase view size (increases viewsize cvar)");
+//	Cmd_AddCommand ("sizedown",SCR_SizeDown_f, "decrease view size (decreases viewsize cvar)");
 	Cmd_AddCommand ("screenshot",SCR_ScreenShot_f, "takes a screenshot of the next rendered frame");
 	Cmd_AddCommand ("envmap", R_Envmap_f, "render a cubemap (skybox) of the current scene");
 	Cmd_AddCommand ("infobar", SCR_InfoBar_f, "display a text in the infobar (usage: infobar expiretime string)");
@@ -1873,7 +1878,7 @@ static void R_Envmap_f (void)
 		r_refdef.view.quality = 1;
 		r_refdef.view.clear = true;
 		R_Mesh_Start();
-		R_RenderView();
+		R_RenderView(0.0);
 		R_Mesh_Finish();
 		SCR_ScreenShot(filename, buffer1, buffer2, 0, vid.height - (r_refdef.view.y + r_refdef.view.height), size, size, envmapinfo[j].flipx, envmapinfo[j].flipy, envmapinfo[j].flipdiagonaly, false, false, false, false);
 	}
@@ -2070,9 +2075,12 @@ void R_ClearScreen(qboolean fogcolor)
 	GL_Clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | (vid.stencil ? GL_STENCIL_BUFFER_BIT : 0), clearcolor, 1.0f, 128);
 }
 
-int r_stereo_side;
+extern int r_stereo_side;
 
-static void SCR_DrawScreen (void)
+float GetFOV();
+bool VR_GetMaxFovTangents(float *tanX, float *tanY);
+
+/*static*/ void SCR_DrawScreen (int x, int y)
 {
 	Draw_Frame();
 
@@ -2091,48 +2099,12 @@ static void SCR_DrawScreen (void)
 		size = scr_viewsize.value * (1.0 / 100.0);
 		size = min(size, 1);
 
-		if (r_stereo_sidebyside.integer)
-		{
-			r_refdef.view.width = (int)(vid.width * size / 2.5);
-			r_refdef.view.height = (int)(vid.height * size / 2.5 * (1 - bound(0, r_letterbox.value, 100) / 100));
-			r_refdef.view.depth = 1;
-			r_refdef.view.x = (int)((vid.width - r_refdef.view.width * 2.5) * 0.5);
-			r_refdef.view.y = (int)((vid.height - r_refdef.view.height)/2);
-			r_refdef.view.z = 0;
-			if (r_stereo_side)
-				r_refdef.view.x += (int)(r_refdef.view.width * 1.5);
-		}
-		else if (r_stereo_horizontal.integer)
-		{
-			r_refdef.view.width = (int)(vid.width * size / 2);
-			r_refdef.view.height = (int)(vid.height * size * (1 - bound(0, r_letterbox.value, 100) / 100));
-			r_refdef.view.depth = 1;
-			r_refdef.view.x = (int)((vid.width - r_refdef.view.width * 2.0)/2);
-			r_refdef.view.y = (int)((vid.height - r_refdef.view.height)/2);
-			r_refdef.view.z = 0;
-			if (r_stereo_side)
-				r_refdef.view.x += (int)(r_refdef.view.width);
-		}
-		else if (r_stereo_vertical.integer)
-		{
-			r_refdef.view.width = (int)(vid.width * size);
-			r_refdef.view.height = (int)(vid.height * size * (1 - bound(0, r_letterbox.value, 100) / 100) / 2);
-			r_refdef.view.depth = 1;
-			r_refdef.view.x = (int)((vid.width - r_refdef.view.width)/2);
-			r_refdef.view.y = (int)((vid.height - r_refdef.view.height * 2.0)/2);
-			r_refdef.view.z = 0;
-			if (r_stereo_side)
-				r_refdef.view.y += (int)(r_refdef.view.height);
-		}
-		else
-		{
-			r_refdef.view.width = (int)(vid.width * size);
-			r_refdef.view.height = (int)(vid.height * size * (1 - bound(0, r_letterbox.value, 100) / 100));
-			r_refdef.view.depth = 1;
-			r_refdef.view.x = (int)((vid.width - r_refdef.view.width)/2);
-			r_refdef.view.y = (int)((vid.height - r_refdef.view.height)/2);
-			r_refdef.view.z = 0;
-		}
+		r_refdef.view.width = (int)(vid.width * size);
+		r_refdef.view.height = (int)(vid.height * size * (1 - bound(0, r_letterbox.value, 100) / 100));
+		r_refdef.view.depth = 1;
+		r_refdef.view.x = (int)((vid.width - r_refdef.view.width)/2) + x;
+		r_refdef.view.y = (int)((vid.height - r_refdef.view.height)/2) + y;
+		r_refdef.view.z = 0;
 
 		// LordHavoc: viewzoom (zoom in for sniper rifles, etc)
 		// LordHavoc: this is designed to produce widescreen fov values
@@ -2141,28 +2113,40 @@ static void SCR_DrawScreen (void)
 		// for a 4x3 display, if the ratio is not 4x3 this makes the fov
 		// higher/lower according to the ratio
 		r_refdef.view.useperspective = true;
-		r_refdef.view.frustum_y = tan(scr_fov.value * M_PI / 360.0) * (3.0/4.0) * cl.viewzoom;
-		r_refdef.view.frustum_x = r_refdef.view.frustum_y * (float)r_refdef.view.width / (float)r_refdef.view.height / vid_pixelheight.value;
+		{
+			float tanx, tany;
+			//The eye projection comes from the runtime and is asymmetric, so cull with the
+			//widest tangent of either eye rather than a frustum derived from the aspect ratio
+			if (VR_GetMaxFovTangents(&tanx, &tany))
+			{
+				r_refdef.view.frustum_y = tany * cl.viewzoom;
+				r_refdef.view.frustum_x = tanx * cl.viewzoom;
+			}
+			else
+			{
+				r_refdef.view.frustum_y = tan(GetFOV() * M_PI / 360.0) * /*(3.0/4.0) * */ cl.viewzoom;
+				r_refdef.view.frustum_x = r_refdef.view.frustum_y * (float)r_refdef.view.width / (float)r_refdef.view.height / vid_pixelheight.value;
+			}
+		}
 
 		r_refdef.view.frustum_x *= r_refdef.frustumscale_x;
 		r_refdef.view.frustum_y *= r_refdef.frustumscale_y;
 		r_refdef.view.ortho_x = atan(r_refdef.view.frustum_x) * (360.0 / M_PI); // abused as angle by VM_CL_R_SetView
 		r_refdef.view.ortho_y = atan(r_refdef.view.frustum_y) * (360.0 / M_PI); // abused as angle by VM_CL_R_SetView
 
-		if(!CL_VM_UpdateView(r_stereo_side ? 0.0 : max(0.0, cl.time - cl.oldtime)))
-			R_RenderView();
+		if(r_stereo_side == 0)
+			CL_VM_UpdateView(max(0.0, cl.time - cl.oldtime));
+
+		R_RenderView();
 	}
 
-	if (!r_stereo_sidebyside.integer && !r_stereo_horizontal.integer && !r_stereo_vertical.integer)
-	{
-		r_refdef.view.width = vid.width;
-		r_refdef.view.height = vid.height;
-		r_refdef.view.depth = 1;
-		r_refdef.view.x = 0;
-		r_refdef.view.y = 0;
-		r_refdef.view.z = 0;
-		r_refdef.view.useperspective = false;
-	}
+	r_refdef.view.width = vid.width;
+	r_refdef.view.height = vid.height;
+	r_refdef.view.depth = 1;
+	r_refdef.view.x = x;
+	r_refdef.view.y = y;
+	r_refdef.view.z = 0;
+	r_refdef.view.useperspective = false;
 
 	if (cls.timedemo && cls.td_frames > 0 && timedemo_screenshotframelist.string && timedemo_screenshotframelist.string[0])
 	{
@@ -2210,6 +2194,7 @@ static void SCR_DrawScreen (void)
 			Sbar_Draw();
 		SHOWLMP_drawall();
 		SCR_CheckDrawCenterString();
+		R_WeaponWheel_DrawText();
 	}
 	SCR_DrawNetGraph ();
 	MR_Draw();
@@ -2222,7 +2207,8 @@ static void SCR_DrawScreen (void)
 
 	SCR_DrawInfobar();
 
-	SCR_DrawTouchscreenOverlay();
+	// No need for this
+	//SCR_DrawTouchscreenOverlay();
 
 	if (r_timereport_active)
 		R_TimeReport("2d");
@@ -2623,16 +2609,6 @@ void SCR_UpdateLoadingScreen (qboolean clear, qboolean startup)
 	key_consoleactive = old_key_consoleactive;
 }
 
-qboolean R_Stereo_ColorMasking(void)
-{
-	return r_stereo_redblue.integer || r_stereo_redgreen.integer || r_stereo_redcyan.integer;
-}
-
-qboolean R_Stereo_Active(void)
-{
-	return (vid.stereobuffer || r_stereo_sidebyside.integer || r_stereo_horizontal.integer || r_stereo_vertical.integer || R_Stereo_ColorMasking());
-}
-
 extern cvar_t cl_minfps;
 extern cvar_t cl_minfps_fade;
 extern cvar_t cl_minfps_qualitymax;
@@ -2642,7 +2618,7 @@ extern cvar_t cl_minfps_qualityhysteresis;
 extern cvar_t cl_minfps_qualitystepmax;
 extern cvar_t cl_minfps_force;
 static double cl_updatescreen_quality = 1;
-void CL_UpdateScreen(void)
+void CL_BeginUpdateScreen()
 {
 	vec3_t vieworigin;
 	static double drawscreenstart = 0.0;
@@ -2760,11 +2736,6 @@ void CL_UpdateScreen(void)
 	if (scr_viewsize.value > 120)
 		Cvar_Set ("viewsize","120");
 
-	// bound field of view
-	if (scr_fov.value < 1)
-		Cvar_Set ("fov","1");
-	if (scr_fov.value > 170)
-		Cvar_Set ("fov","170");
 
 	// intermission is always full screen
 	if (cl.intermission)
@@ -2791,23 +2762,6 @@ void CL_UpdateScreen(void)
 
 	SCR_SetUpToDrawConsole();
 
-#ifndef USE_GLES2
-	if (qglDrawBuffer)
-	{
-		CHECKGLERROR
-		qglDrawBuffer(GL_BACK);CHECKGLERROR
-		// set dithering mode
-		if (gl_dither.integer)
-		{
-			qglEnable(GL_DITHER);CHECKGLERROR
-		}
-		else
-		{
-			qglDisable(GL_DITHER);CHECKGLERROR
-		}
-	}
-#endif
-
 	R_Viewport_InitOrtho(&viewport, &identitymatrix, 0, 0, vid.width, vid.height, 0, 0, vid_conwidth.integer, vid_conheight.integer, -10, 100, NULL);
 	R_Mesh_SetRenderTargets(0, NULL, NULL, NULL, NULL, NULL);
 	R_SetViewport(&viewport);
@@ -2816,81 +2770,22 @@ void CL_UpdateScreen(void)
 	GL_DepthMask(true);
 
 	R_ClearScreen(false);
-	r_refdef.view.clear = false;
+
+	//For some reason, with this line in it breaks the left eye rendering on OpenXR, I HAVE NO IDEA WHY!?!
+	//r_refdef.view.clear = false;
 	r_refdef.view.isoverlay = false;
 
 	// calculate r_refdef.view.quality
 	r_refdef.view.quality = cl_updatescreen_quality;
+}
 
-#ifndef USE_GLES2
-	if (qglPolygonStipple)
-	{
-		if(scr_stipple.integer)
-		{
-			GLubyte stipple[128];
-			int i, s, width, parts;
-			static int frame = 0;
-			++frame;
-	
-			s = scr_stipple.integer;
-			parts = (s & 007);
-			width = (s & 070) >> 3;
-	
-			qglEnable(GL_POLYGON_STIPPLE);CHECKGLERROR // 0x0B42
-			for(i = 0; i < 128; ++i)
-			{
-				int line = i/4;
-				stipple[i] = (((line >> width) + frame) & ((1 << parts) - 1)) ? 0x00 : 0xFF;
-			}
-			qglPolygonStipple(stipple);CHECKGLERROR
-		}
-		else
-		{
-			qglDisable(GL_POLYGON_STIPPLE);CHECKGLERROR
-		}
-	}
-#endif
 
-#ifndef USE_GLES2
-	if (R_Stereo_Active())
-	{
-		r_stereo_side = 0;
-
-		if (r_stereo_redblue.integer || r_stereo_redgreen.integer || r_stereo_redcyan.integer)
-		{
-			r_refdef.view.colormask[0] = 1;
-			r_refdef.view.colormask[1] = 0;
-			r_refdef.view.colormask[2] = 0;
-		}
-
-		if (vid.stereobuffer)
-			qglDrawBuffer(GL_BACK_RIGHT);
-
-		SCR_DrawScreen();
-
-		r_stereo_side = 1;
-		r_refdef.view.clear = true;
-
-		if (r_stereo_redblue.integer || r_stereo_redgreen.integer || r_stereo_redcyan.integer)
-		{
-			r_refdef.view.colormask[0] = 0;
-			r_refdef.view.colormask[1] = r_stereo_redcyan.integer || r_stereo_redgreen.integer;
-			r_refdef.view.colormask[2] = r_stereo_redcyan.integer || r_stereo_redblue.integer;
-		}
-
-		if (vid.stereobuffer)
-			qglDrawBuffer(GL_BACK_LEFT);
-
-		SCR_DrawScreen();
-	}
-	else
-#endif
-		SCR_DrawScreen();
-
+void CL_EndUpdateScreen()
+{
 	SCR_CaptureVideo();
 
-	if (qglFlush)
-		qglFlush(); // FIXME: should we really be using qglFlush here?
+//	if (qglFlush)
+//		qglFlush(); // FIXME: should we really be using qglFlush here?
 
 	if (!vid_activewindow)
 		VID_SetMouse(false, false, false);

@@ -48,8 +48,9 @@ cvar_t pr_checkextension = {CVAR_READONLY, "pr_checkextension", "1", "indicates 
 cvar_t samelevel = {CVAR_NOTIFY, "samelevel","0", "repeats same level if level ends (due to timelimit or someone hitting an exit)"};
 cvar_t skill = {0, "skill","1", "difficulty level of game, affects monster layouts in levels, 0 = easy, 1 = normal, 2 = hard, 3 = nightmare (same layout as hard but monsters fire twice)"};
 cvar_t slowmo = {0, "slowmo", "1.0", "controls game speed, 0.5 is half speed, 2 is double speed"};
+cvar_t bullettime = {0, "bullettime", "0", "Whether bullet-time mode is enabled"};
 
-cvar_t sv_accelerate = {0, "sv_accelerate", "10", "rate at which a player accelerates to sv_maxspeed"};
+cvar_t sv_accelerate = {0, "sv_accelerate", "1000", "rate at which a player accelerates to sv_maxspeed"};
 cvar_t sv_aim = {CVAR_SAVE, "sv_aim", "2", "maximum cosine angle for quake's vertical autoaim, a value above 1 completely disables the autoaim, quake used 0.93"};
 cvar_t sv_airaccel_qw = {0, "sv_airaccel_qw", "1", "ratio of QW-style air control as opposed to simple acceleration; when < 0, the speed is clamped against the maximum allowed forward speed after the move"};
 cvar_t sv_airaccel_qw_stretchfactor = {0, "sv_airaccel_qw_stretchfactor", "0", "when set, the maximum acceleration increase the player may get compared to forward-acceleration when strafejumping"};
@@ -150,7 +151,6 @@ cvar_t sv_warsowbunny_turnaccel = {0, "sv_warsowbunny_turnaccel", "0", "max shar
 cvar_t sv_warsowbunny_backtosideratio = {0, "sv_warsowbunny_backtosideratio", "0.8", "lower values make it easier to change direction without losing speed; the drawback is \"understeering\" in sharp turns"};
 cvar_t sv_onlycsqcnetworking = {0, "sv_onlycsqcnetworking", "0", "disables legacy entity networking code for higher performance (except on clients, which can still be legacy)"};
 cvar_t sv_areadebug = {0, "sv_areadebug", "0", "disables physics culling for debugging purposes (only for development)"};
-cvar_t sys_ticrate = {CVAR_SAVE, "sys_ticrate","0.0138889", "how long a server frame is in seconds, 0.05 is 20fps server rate, 0.1 is 10fps (can not be set higher than 0.1), 0 runs as many server frames as possible (makes games against bots a little smoother, overwhelms network players), 0.0138889 matches QuakeWorld physics"};
 cvar_t teamplay = {CVAR_NOTIFY, "teamplay","0", "teamplay mode, values depend on mod but typically 0 = no teams, 1 = no team damage no self damage, 2 = team damage and self damage, some mods support 3 = no team damage but can damage self"};
 cvar_t timelimit = {CVAR_NOTIFY, "timelimit","0", "ends level at this time (in minutes)"};
 cvar_t sv_threaded = {0, "sv_threaded", "0", "enables a separate thread for server code, improving performance, especially when hosting a game while playing, EXPERIMENTAL, may be crashy"};
@@ -458,6 +458,7 @@ void SV_Init (void)
 	Cvar_RegisterVariable (&samelevel);
 	Cvar_RegisterVariable (&skill);
 	Cvar_RegisterVariable (&slowmo);
+	Cvar_RegisterVariable (&bullettime);
 	Cvar_RegisterVariable (&sv_accelerate);
 	Cvar_RegisterVariable (&sv_aim);
 	Cvar_RegisterVariable (&sv_airaccel_qw);
@@ -559,7 +560,6 @@ void SV_Init (void)
 	Cvar_RegisterVariable (&sv_warsowbunny_backtosideratio);
 	Cvar_RegisterVariable (&sv_onlycsqcnetworking);
 	Cvar_RegisterVariable (&sv_areadebug);
-	Cvar_RegisterVariable (&sys_ticrate);
 	Cvar_RegisterVariable (&teamplay);
 	Cvar_RegisterVariable (&timelimit);
 	Cvar_RegisterVariable (&sv_threaded);
@@ -1956,6 +1956,8 @@ SV_WriteClientdataToMessage
 
 ==================
 */
+float GetSysTicrate();
+
 void SV_WriteClientdataToMessage (client_t *client, prvm_edict_t *ent, sizebuf_t *msg, int *stats)
 {
 	prvm_prog_t *prog = SVVM_prog;
@@ -2080,7 +2082,7 @@ void SV_WriteClientdataToMessage (client_t *client, prvm_edict_t *ent, sizebuf_t
 		| (sv_gameplayfix_nogravityonground.integer ? MOVEFLAG_NOGRAVITYONGROUND : 0)
 		| (sv_gameplayfix_gravityunaffectedbyticrate.integer ? MOVEFLAG_GRAVITYUNAFFECTEDBYTICRATE : 0)
 	;
-	statsf[STAT_MOVEVARS_TICRATE] = sys_ticrate.value;
+	statsf[STAT_MOVEVARS_TICRATE] = GetSysTicrate();
 	statsf[STAT_MOVEVARS_TIMESCALE] = slowmo.value;
 	statsf[STAT_MOVEVARS_GRAVITY] = sv_gravity.value;
 	statsf[STAT_MOVEVARS_STOPSPEED] = sv_stopspeed.value;
@@ -2338,7 +2340,7 @@ static void SV_SendClientDatagram (client_t *client)
 		//
 		// at very low rates (or very small sys_ticrate) the packet size is
 		// not reduced below 128, but packets may be sent less often
-		maxsize = (int)(clientrate * sys_ticrate.value);
+		maxsize = (int)(clientrate * GetSysTicrate());
 		maxsize = bound(128, maxsize, 1400);
 		maxsize2 = 1400;
 		// csqc entities can easily exceed 128 bytes, so disable throttling in
@@ -3306,7 +3308,10 @@ void SV_SpawnServer (const char *server)
 	else
 	{
 		// open server port
-		NetConn_OpenServerPorts(true);
+		//NetConn_OpenServerPorts(true);
+
+		//Just use the loop connection
+		NetConn_OpenServerPorts(0);
 	}
 
 //
@@ -3952,10 +3957,10 @@ static int SV_ThreadFunc(void *voiddata)
 			double advancetime;
 			float offset;
 
-			if (sys_ticrate.value <= 0)
+			if (GetSysTicrate() <= 0)
 				advancetime = min(sv_timer, 0.1); // don't step more than 100ms
 			else
-				advancetime = sys_ticrate.value;
+				advancetime = GetSysTicrate();
 
 			if(advancetime > 0)
 			{
