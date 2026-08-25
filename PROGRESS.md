@@ -23,10 +23,11 @@ that point. This is SVN-era DarkPlaces — no `cmd_state_t`, no `taskqueue.c`,
 
 This project's worktree is that commit, branch `vr-2013-base`.
 
-**Their engine changeset is 45 modified files and 2,469 changed lines**
+**Their engine changeset is 45 modified files and 2,546 changed lines**
 (whitespace-insensitive; their tree is CRLF and was reindented by an IDE, so a
-naive diff reports roughly ten times that and is useless), plus 6 added files.
-For scale, Quake2Quest's was 62 files and 6,936 lines.
+naive diff reports roughly ten times that and is useless), plus 7 added files —
+of which `r_weaponwheel.c` alone is 845 lines. For scale, Quake2Quest's was 62
+files and 6,936 lines.
 
 Unlike Quake II, **no rebase is needed.** Their engine is vendored with changes
 already applied, and the base version is now known, so the changeset can be
@@ -40,43 +41,64 @@ Quake II.
 | `../QuakeQuest-src` | their repo, full history |
 | `../QuakeQuest-refs/dp-upstream` | upstream DarkPlaces (xonotic/darkplaces) |
 | `../QuakeQuest-refs/dp-2013` | stock base, worktree at `a2210a95` |
-| `../QuakeQuest-refs/qq-155` | their v1.5.5, worktree |
-| `../QuakeQuest-refs/qq155-dp-lf` | v1.5.5 engine, LF-normalised, for diffing |
+| `../QuakeQuest-refs/qq-dp-lf` | **HEAD engine, LF-normalised — the port target** |
+| `../QuakeQuest-refs/qq-155` | their v1.5.5 (the owner's APK), worktree |
+| `../QuakeQuest-refs/qq155-dp-lf` | v1.5.5 engine, LF-normalised, to see what HEAD changed |
 
-Diff with `diff -uw ../QuakeQuest-refs/dp-2013/<f> ../QuakeQuest-refs/qq155-dp-lf/<f>`.
+Diff with `diff -uw ../QuakeQuest-refs/dp-2013/<f> ../QuakeQuest-refs/qq-dp-lf/<f>`.
 The `-w` is not optional — without it the reindentation drowns the signal.
 
-## Which version is theirs
+## Which version is theirs, and which we target
 
 The installed APK at `E:\Games\Quest Ports\APKs\QuakeQuest.apk` reports a build
 stamp of `22:44:15 Feb  5 2023`, which is tag **v1.5.5** (`e8a6928`,
 2023-02-05). The owner's saves and `config.cfg` came from that build.
 
-Later work exists and is **not** in what the owner plays:
+**Target decided by the owner (2026-08-25): master HEAD** (`dffd724`,
+2026-08-01, untagged). Everything below is measured against HEAD.
 
-- `v1.5.6` (2023-05-10) — two input fixes, a Quest firmware v53 crash fix, and
-  "ensure screen layer appears in front of player". Last tagged release.
-- master HEAD (Aug 2026, untagged) — adds `r_weaponwheel.c` (845 lines), a JSON
-  weapon-wheel config, "use full Quest FOV", Pico support, newer OpenXR loader.
+What HEAD has that his APK does not:
 
-Everything below is measured against **v1.5.5**.
+- **`r_weaponwheel.c`** (845 lines) plus ~90 lines of integration and an
+  `assets/weaponwheel.json`. Self-contained — its own small JSON parser reading
+  through `FS_LoadFile`, no Android dependency. Ports cleanly.
+- **"Use full Quest FOV"** (`df05b84`, 2026-07-31). This is the important one.
+  v1.5.5 *averaged* the two eyes' asymmetric FOV into one symmetric frustum on
+  Meta hardware, throwing away peripheral vision. HEAD projects with the real
+  per-eye asymmetric FOV, and adds `VR_GetMaxFovTangents` so the engine culls
+  against the union of both eye frusta. **That is precisely the bug this
+  project's owner and I hit and had to fix by hand in Quake II**, where world
+  geometry vanished at the edge of vision and popped in when turning — it shows
+  through VDXR because the streamed per-eye FOV is wider than a Quest's native
+  one. Team Beef fixed it upstream. Taking HEAD means inheriting the fix rather
+  than reinventing it.
+- `GetHUDOffset` — 2D HUD correction for the asymmetric frustum, the principled
+  version of the per-eye ±10 pixel shift v1.5.5 hardcoded.
+- Pico support, Khronos-sourced OpenXR loader, better permission handling.
+  Android-side; irrelevant to PC but harmless.
+- `v1.5.6`'s two input fixes and the firmware-v53 crash fix are included.
+
+The one cost: HEAD is untagged and the owner has never played it, so any
+behaviour that differs from his APK needs to be checked against intent rather
+than against memory.
 
 ## The changeset, classified
 
-### VR logic — port verbatim (~1,050 lines)
+### VR logic — port verbatim (~1,150 lines, plus the 845-line weapon wheel)
 
 | file | lines | what |
 |---|---:|---|
 | `view.c` | 318 | the core. HMD position into `vieworg`, controller pose into `gunorg`/`gunangles`, and per-weapon hardcoded position/pitch/scale for all nine Quake weapons. Also their comfort defaults: `cl_bob` 0, `cl_bobmodel` 0, `cl_rollangle` 0, `v_kick*` 0, `v_deathtiltangle` 0, `cl_viewmodel_scale` 0.6 |
-| `cl_screen.c` | 213 | splits `CL_UpdateScreen` into `CL_BeginUpdateScreen`/`CL_EndUpdateScreen` and `SCR_DrawScreen(x, y)`; deletes DarkPlaces' own stereo modes and repurposes `r_stereo_side` as the eye index; `GetFOV()` replaces the `fov` cvar; per-eye centerprint x-shift of ±10; shareware nag replaced with a Steam URL |
+| `cl_screen.c` | 231 | splits `CL_UpdateScreen` into `CL_BeginUpdateScreen`/`CL_EndUpdateScreen` and `SCR_DrawScreen(x, y)`; deletes DarkPlaces' own stereo modes and repurposes `r_stereo_side` as the eye index; `GetFOV()` replaces the `fov` cvar; `GetHUDOffset` corrects 2D for the asymmetric eye frustum; shareware nag replaced with a Steam URL |
 | `cl_input.c` | 93 | VR movement and turning: `vr_yawmode` (swivel / snap / smooth), `cl_comfort`, `cl_walkdirection`, `cl_righthanded`, `cl_trackingmode`, `cl_movementspeed` replacing forward/back/side speeds, and the line that makes aim follow the gun: `VectorCopy(gunangles, cl.cmd.viewangles)` |
-| `gl_rmain.c` | 88 | `vr_worldscale` (default 26.2467 units/metre), `GetStereoSeparation()` = worldscale × 0.065, `r_stereo_side`, `r_lasersight` (default 2) |
+| `gl_rmain.c` | 108 | `vr_worldscale` (default 26.2467 units/metre), `GetStereoSeparation()` = worldscale × 0.065, `r_stereo_side`, `r_lasersight` (default 2) |
 | `host.c` | 81 | `Host_Main` split into `Host_BeginFrame` / `Host_Frame(eye, x, y)` / `Host_EndFrame` so the VR layer drives the loop; `GetSysTicrate()` replaces the `sys_ticrate` cvar |
-| `sbar.c` | 80 | HUD placement for VR |
-| `cl_main.c` | 63 | laser sight positioning and its dynamic light, lightning bolt origin moved to the gun |
+| `sbar.c` | 84 | HUD placement for VR |
+| `cl_main.c` | 68 | laser sight positioning and its dynamic light, lightning bolt origin moved to the gun |
 | `sv_phys.c` | 42 | swaps the player entity's origin for the gun origin around weapon fire, so hitscan and projectiles come out of the controller, then restores it |
 | `r_lasersight.c` | +41 | new file, the laser sight itself |
-| `menu.c` | 641 | their menus, including the Controller page: tracking mode (3DoF/6DoF weapon), heading mode (off-hand controller / HMD), handedness, turn mode, snap-turn angle, smooth-turn speed, and the smooth-turn nausea warning. Also mouse/`K_MOUSE1` navigation and larger menu text |
+| `r_weaponwheel.c` | +845 | new file, HEAD only. The weapon wheel, with a self-contained JSON parser reading `weaponwheel.json` through `FS_LoadFile` so mods can ship their own. Integrated through `render.h`, `cl_main.c`, `cl_screen.c`, `gl_rmain.c`, `menu.c`, `sbar.c` |
+| `menu.c` | 653 | their menus, including the Controller page: tracking mode (3DoF/6DoF weapon), heading mode (off-hand controller / HMD), handedness, turn mode, snap-turn angle, smooth-turn speed, and the smooth-turn nausea warning. Also mouse/`K_MOUSE1` navigation and larger menu text |
 | small | ~40 | `console.c`/`keys.c` (`BigScreenMode`, split screen update), `world.c`/`sv_main.c` (`GetSysTicrate`, `bullettime`), `gl_draw.c` (`r_textshadow` 3, `r_textbrightness` 1 for VR readability), headers |
 
 ### Android platform — do NOT port (~700 lines)
@@ -148,11 +170,20 @@ Quake II's `gl1_stereo 8`. So the built-in defaults are what he plays:
   `cl_stainmaps 1`, `sensitivity 4`, `snd_speed 44100`.
 - His runtime `config.cfg` adds `vr_yawmode 2` (smooth turn) and
   `r_lasersight 0` — so he plays with smooth turning and the laser sight off.
+- HEAD adds ten weapon-wheel cvars, all archived and on by default:
+  `vr_weaponwheel` 1 (dominant-hand grip), `vr_weaponwheel_distance` 0.35 m,
+  `_radius` 0.2 m, `_modelsize` 0.11 m, `_modelpitch` 20, `_modelyaw` -145,
+  `_spin` 45 deg/s, `_deflection` 22.5, `_slowmo` 0.3 (game speed while open).
+
+None of these defaults changed between v1.5.5 and HEAD, so his tuned settings
+carry over unchanged; the wheel is the only thing that will be new to him.
 
 Game data: registered `id1` PAK0+PAK1, `dopa`, a 79MB soundtrack in
 `id1/sound/cdtracks`, at `E:\Games\Quest Ports\QuakeQuest`. No HD texture or
 weapon packs — nothing like Quake II's `pak6`/`pak99`, so the asset trap that
-cost that port two play sessions does not exist here.
+cost that port two play sessions does not exist here. The one shipped asset the
+build must install is HEAD's `assets/weaponwheel.json`; without it the wheel
+silently falls back to compiled-in defaults, which would look like a bug.
 
 ## Build
 
@@ -165,11 +196,6 @@ Quake II's first attempt.
 
 Flatscreen stays working through a `vr_enabled` runtime gate: with VR off,
 `CL_UpdateScreen` calls Begin/Draw/End itself, which is what stock did anyway.
-
-## Open questions for the owner
-
-1. **Which version to match** — v1.5.5 (his APK), v1.5.6 (last release), or
-   master HEAD (adds the weapon wheel).
 
 ## Next
 
