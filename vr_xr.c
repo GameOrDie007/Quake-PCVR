@@ -1,0 +1,1288 @@
+/*
+	vr_xr.c
+
+	PC port of Team Beef's QuakeQuestSrc/TBXR_Common.c.
+
+	Everything OpenXR here is theirs: the same extensions where they exist on
+	PC, the same spaces, the same swapchain format, the same frame structure,
+	the same layer composition, the same maths. What changes is only the
+	platform seam:
+
+	  - EGL and the JNI app thread become the SDL window and GL context the
+	    engine already creates, bound through XrGraphicsBindingOpenGLWin32KHR.
+	  - XR_KHR_opengl_es_enable becomes XR_KHR_opengl_enable, and swapchain
+	    images become XrSwapchainImageOpenGLKHR.
+	  - Their eye framebuffer uses GL_EXT_multisampled_render_to_texture, a
+	    GLES extension that resolves implicitly. Desktop GL has no equivalent,
+	    so the same sample count is reached with an explicit multisample
+	    framebuffer and a resolve blit.
+	  - Their Android-only extensions, thread hinting and Java lifecycle drop
+	    out. The message queue and app thread go with them, because on PC the
+	    engine's own main thread runs the loop.
+	  - GL entry points past 1.1 come from the engine's own qgl* pointers
+	    rather than a second loader.
+
+	Copyright (C) 2023 Simon Brown (Team Beef)
+	Copyright (C) 2026 QuakeQuest PCVR port
+
+	This program is free software; you can redistribute it and/or modify it
+	under the terms of the GNU General Public License as published by the Free
+	Software Foundation; either version 2 of the License, or (at your option)
+	any later version.
+*/
+
+#include "quakedef.h"
+#include "glquake.h"
+#include "vr_tbxr.h"
+#include "vr_pc.h"
+
+#include <math.h>
+
+#ifndef GL_FRAMEBUFFER_SRGB
+#define GL_FRAMEBUFFER_SRGB 0x8DB9
+#endif
+#ifndef GL_SRGB8_ALPHA8
+#define GL_SRGB8_ALPHA8 0x8C43
+#endif
+#ifndef GL_DEPTH_COMPONENT24
+#define GL_DEPTH_COMPONENT24 0x81A6
+#endif
+
+ovrApp gAppState;
+
+/*
+	Their command line sets these; ours keeps the same defaults, which is what
+	the owner's install runs with - his commandline.txt is just "quake".
+*/
+int NUM_MULTI_SAMPLES = 1;
+int REFRESH = 0;
+float SS_MULTIPLIER = 1.3f;
+
+static GLboolean stageSupported = GL_FALSE;
+
+// The desktop mirror. vid_sdl.c publishes the real window size here, because
+// vid.width/vid.height are the eye buffer in VR.
+extern int vid_mirrorwidth;
+extern int vid_mirrorheight;
+
+// GetFOV lives with the other engine-facing entry points in vr_pc.c, but the
+// value is produced here, as it is in their TBXR_Common.c.
+extern float fov_y;
+
+/* ------------------------------------------------------------------------ */
+/* Error reporting                                                          */
+/* ------------------------------------------------------------------------ */
+
+/*
+	The instance, the system and the eye resolution are all established before
+	Host_Init, because the engine has to size itself to one eye buffer before
+	it opens its window. That is also before the console exists, so anything
+	printed there would vanish - including the reason a headset was not found,
+	which is exactly what one wants to read. Buffer it and replay it once the
+	console is up.
+*/
+static char vr_earlylog[8192];
+static qboolean vr_consoleready = false;
+
+static void VR_Log(const char *fmt, ...) DP_FUNC_PRINTF(1);
+static void VR_Log(const char *fmt, ...)
+{
+	va_list argptr;
+	char msg[1024];
+
+	va_start(argptr, fmt);
+	dpvsnprintf(msg, sizeof(msg), fmt, argptr);
+	va_end(argptr);
+
+	if (vr_consoleready)
+	{
+		Con_Print(msg);
+		return;
+	}
+
+	strlcat(vr_earlylog, msg, sizeof(vr_earlylog));
+}
+
+void VR_FlushEarlyLog(void)
+{
+	vr_consoleready = true;
+
+	if (vr_earlylog[0])
+	{
+		Con_Print(vr_earlylog);
+		vr_earlylog[0] = 0;
+	}
+}
+
+XrInstance TBXR_GetXrInstance(void)
+{
+	return gAppState.Instance;
+}
+
+static void TBXR_CheckErrors(XrResult result, const char *function)
+{
+	if (XR_FAILED(result))
+	{
+		char buffer[XR_MAX_RESULT_STRING_SIZE];
+
+		if (gAppState.Instance != XR_NULL_HANDLE &&
+				XR_SUCCEEDED(xrResultToString(gAppState.Instance, result, buffer)))
+		{
+			VR_Log("VR: OpenXR error: %s: %s\n", function, buffer);
+		}
+		else
+		{
+			VR_Log("VR: OpenXR error: %s: %d\n", function, (int)result);
+		}
+	}
+}
+
+#define OXR(func) TBXR_CheckErrors(func, #func)
+
+/* ------------------------------------------------------------------------ */
+/* Maths - theirs, verbatim                                                  */
+/* ------------------------------------------------------------------------ */
+
+ovrMatrix4f ovrMatrix4f_CreateFromQuaternion(const XrQuaternionf *q)
+{
+	const float ww = q->w * q->w;
+	const float xx = q->x * q->x;
+	const float yy = q->y * q->y;
+	const float zz = q->z * q->z;
+
+	ovrMatrix4f out;
+	out.M[0][0] = ww + xx - yy - zz;
+	out.M[0][1] = 2 * (q->x * q->y - q->w * q->z);
+	out.M[0][2] = 2 * (q->x * q->z + q->w * q->y);
+	out.M[0][3] = 0;
+
+	out.M[1][0] = 2 * (q->x * q->y + q->w * q->z);
+	out.M[1][1] = ww - xx + yy - zz;
+	out.M[1][2] = 2 * (q->y * q->z - q->w * q->x);
+	out.M[1][3] = 0;
+
+	out.M[2][0] = 2 * (q->x * q->z - q->w * q->y);
+	out.M[2][1] = 2 * (q->y * q->z + q->w * q->x);
+	out.M[2][2] = ww - xx - yy + zz;
+	out.M[2][3] = 0;
+
+	out.M[3][0] = 0;
+	out.M[3][1] = 0;
+	out.M[3][2] = 0;
+	out.M[3][3] = 1;
+	return out;
+}
+
+ovrMatrix4f ovrMatrix4f_Multiply(const ovrMatrix4f *a, const ovrMatrix4f *b)
+{
+	ovrMatrix4f out;
+	int i, j;
+
+	for (i = 0; i < 4; i++)
+	{
+		for (j = 0; j < 4; j++)
+		{
+			out.M[i][j] = a->M[i][0] * b->M[0][j] +
+					a->M[i][1] * b->M[1][j] +
+					a->M[i][2] * b->M[2][j] +
+					a->M[i][3] * b->M[3][j];
+		}
+	}
+
+	return out;
+}
+
+ovrMatrix4f ovrMatrix4f_CreateRotation(const float radiansX, const float radiansY, const float radiansZ)
+{
+	const float sinX = sinf(radiansX);
+	const float cosX = cosf(radiansX);
+	const float sinY = sinf(radiansY);
+	const float cosY = cosf(radiansY);
+	const float sinZ = sinf(radiansZ);
+	const float cosZ = cosf(radiansZ);
+	ovrMatrix4f rotationX = {{{1, 0, 0, 0}, {0, cosX, -sinX, 0}, {0, sinX, cosX, 0}, {0, 0, 0, 1}}};
+	ovrMatrix4f rotationY = {{{cosY, 0, sinY, 0}, {0, 1, 0, 0}, {-sinY, 0, cosY, 0}, {0, 0, 0, 1}}};
+	ovrMatrix4f rotationZ = {{{cosZ, -sinZ, 0, 0}, {sinZ, cosZ, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}};
+	ovrMatrix4f rotationXY = ovrMatrix4f_Multiply(&rotationY, &rotationX);
+	return ovrMatrix4f_Multiply(&rotationZ, &rotationXY);
+}
+
+XrVector4f XrVector4f_MultiplyMatrix4f(const ovrMatrix4f *a, const XrVector4f *v)
+{
+	XrVector4f out;
+	out.x = a->M[0][0] * v->x + a->M[0][1] * v->y + a->M[0][2] * v->z + a->M[0][3] * v->w;
+	out.y = a->M[1][0] * v->x + a->M[1][1] * v->y + a->M[1][2] * v->z + a->M[1][3] * v->w;
+	out.z = a->M[2][0] * v->x + a->M[2][1] * v->y + a->M[2][2] * v->z + a->M[2][3] * v->w;
+	out.w = a->M[3][0] * v->x + a->M[3][1] * v->y + a->M[3][2] * v->z + a->M[3][3] * v->w;
+	return out;
+}
+
+static XrVector3f normalizeVec(XrVector3f vec)
+{
+	float xxyyzz = vec.x * vec.x + vec.y * vec.y + vec.z * vec.z;
+	float reciprocalLength = 1.0f / sqrtf(xxyyzz);
+
+	XrVector3f result;
+	result.x = vec.x * reciprocalLength;
+	result.y = vec.y * reciprocalLength;
+	result.z = vec.z * reciprocalLength;
+	return result;
+}
+
+void NormalizeAngles(vec3_t angles)
+{
+	while (angles[0] >= 90) angles[0] -= 180;
+	while (angles[1] >= 180) angles[1] -= 360;
+	while (angles[2] >= 180) angles[2] -= 360;
+	while (angles[0] < -90) angles[0] += 180;
+	while (angles[1] < -180) angles[1] += 360;
+	while (angles[2] < -180) angles[2] += 360;
+}
+
+#ifndef EPSILON
+#define EPSILON 0.001f
+#endif
+
+void GetAnglesFromVectors(const XrVector3f forward, const XrVector3f right, const XrVector3f up, vec3_t angles)
+{
+	float sr, sp, sy, cr, cp, cy;
+
+	sp = -forward.z;
+
+	float cp_x_cy = forward.x;
+	float cp_x_sy = forward.y;
+	float cp_x_sr = -right.z;
+	float cp_x_cr = up.z;
+
+	float yaw = atan2(cp_x_sy, cp_x_cy);
+	float roll = atan2(cp_x_sr, cp_x_cr);
+
+	cy = cos(yaw);
+	sy = sin(yaw);
+	cr = cos(roll);
+	sr = sin(roll);
+
+	if (fabs(cy) > EPSILON)
+	{
+		cp = cp_x_cy / cy;
+	}
+	else if (fabs(sy) > EPSILON)
+	{
+		cp = cp_x_sy / sy;
+	}
+	else if (fabs(sr) > EPSILON)
+	{
+		cp = cp_x_sr / sr;
+	}
+	else if (fabs(cr) > EPSILON)
+	{
+		cp = cp_x_cr / cr;
+	}
+	else
+	{
+		cp = cos(asin(sp));
+	}
+
+	float pitch = atan2(sp, cp);
+
+	angles[0] = pitch / (M_PI * 2.f / 360.f);
+	angles[1] = yaw / (M_PI * 2.f / 360.f);
+	angles[2] = roll / (M_PI * 2.f / 360.f);
+
+	NormalizeAngles(angles);
+}
+
+void QuatToYawPitchRoll(XrQuaternionf q, vec3_t rotation, vec3_t out)
+{
+	ovrMatrix4f mat = ovrMatrix4f_CreateFromQuaternion(&q);
+
+	if (rotation[0] != 0.0f || rotation[1] != 0.0f || rotation[2] != 0.0f)
+	{
+		ovrMatrix4f rot = ovrMatrix4f_CreateRotation(DEG2RAD(rotation[0]), DEG2RAD(rotation[1]), DEG2RAD(rotation[2]));
+		mat = ovrMatrix4f_Multiply(&mat, &rot);
+	}
+
+	XrVector4f v1 = {0, 0, -1, 0};
+	XrVector4f v2 = {1, 0, 0, 0};
+	XrVector4f v3 = {0, 1, 0, 0};
+
+	XrVector4f forwardInVRSpace = XrVector4f_MultiplyMatrix4f(&mat, &v1);
+	XrVector4f rightInVRSpace = XrVector4f_MultiplyMatrix4f(&mat, &v2);
+	XrVector4f upInVRSpace = XrVector4f_MultiplyMatrix4f(&mat, &v3);
+
+	XrVector3f forward = {-forwardInVRSpace.z, -forwardInVRSpace.x, forwardInVRSpace.y};
+	XrVector3f right = {-rightInVRSpace.z, -rightInVRSpace.x, rightInVRSpace.y};
+	XrVector3f up = {-upInVRSpace.z, -upInVRSpace.x, upInVRSpace.y};
+
+	XrVector3f forwardNormal = normalizeVec(forward);
+	XrVector3f rightNormal = normalizeVec(right);
+	XrVector3f upNormal = normalizeVec(up);
+
+	GetAnglesFromVectors(forwardNormal, rightNormal, upNormal, out);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Eye framebuffers                                                          */
+/* ------------------------------------------------------------------------ */
+
+static void ovrFramebuffer_Clear(ovrFramebuffer *frameBuffer)
+{
+	memset(frameBuffer, 0, sizeof(*frameBuffer));
+	frameBuffer->ColorSwapChain.Handle = XR_NULL_HANDLE;
+}
+
+static bool ovrFramebuffer_Create(
+		XrSession session,
+		ovrFramebuffer *frameBuffer,
+		const GLenum colorFormat,
+		const int width,
+		const int height,
+		const int multisamples)
+{
+	uint32_t i;
+
+	frameBuffer->Width = width;
+	frameBuffer->Height = height;
+	frameBuffer->Multisamples = multisamples;
+
+	XrSwapchainCreateInfo swapChainCreateInfo;
+	memset(&swapChainCreateInfo, 0, sizeof(swapChainCreateInfo));
+	swapChainCreateInfo.type = XR_TYPE_SWAPCHAIN_CREATE_INFO;
+	swapChainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
+	swapChainCreateInfo.format = colorFormat;
+	swapChainCreateInfo.sampleCount = 1;
+	swapChainCreateInfo.width = width;
+	swapChainCreateInfo.height = height;
+	swapChainCreateInfo.faceCount = 1;
+	swapChainCreateInfo.arraySize = 1;
+	swapChainCreateInfo.mipCount = 1;
+
+	frameBuffer->ColorSwapChain.Width = swapChainCreateInfo.width;
+	frameBuffer->ColorSwapChain.Height = swapChainCreateInfo.height;
+
+	OXR(xrCreateSwapchain(session, &swapChainCreateInfo, &frameBuffer->ColorSwapChain.Handle));
+	OXR(xrEnumerateSwapchainImages(
+			frameBuffer->ColorSwapChain.Handle, 0, &frameBuffer->TextureSwapChainLength, NULL));
+
+	frameBuffer->ColorSwapChainImage = (XrSwapchainImageOpenGLKHR *)malloc(
+			frameBuffer->TextureSwapChainLength * sizeof(XrSwapchainImageOpenGLKHR));
+
+	for (i = 0; i < frameBuffer->TextureSwapChainLength; i++)
+	{
+		frameBuffer->ColorSwapChainImage[i].type = XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR;
+		frameBuffer->ColorSwapChainImage[i].next = NULL;
+	}
+
+	OXR(xrEnumerateSwapchainImages(
+			frameBuffer->ColorSwapChain.Handle,
+			frameBuffer->TextureSwapChainLength,
+			&frameBuffer->TextureSwapChainLength,
+			(XrSwapchainImageBaseHeader *)frameBuffer->ColorSwapChainImage));
+
+	frameBuffer->FrameBuffers =
+			(GLuint *)malloc(frameBuffer->TextureSwapChainLength * sizeof(GLuint));
+
+	/*
+		One plain framebuffer per swapchain image. Theirs attaches the colour
+		texture with glFramebufferTexture2DMultisampleEXT and renders straight
+		into it; ours only ever receives a resolve blit, so it is single
+		sample and carries no depth.
+	*/
+	for (i = 0; i < frameBuffer->TextureSwapChainLength; i++)
+	{
+		const GLuint colorTexture = frameBuffer->ColorSwapChainImage[i].image;
+		GLenum status;
+
+		qglBindTexture(GL_TEXTURE_2D, colorTexture);
+		qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		qglTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		qglBindTexture(GL_TEXTURE_2D, 0);
+
+		qglGenFramebuffers(1, &frameBuffer->FrameBuffers[i]);
+		qglBindFramebuffer(GL_FRAMEBUFFER, frameBuffer->FrameBuffers[i]);
+		qglFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
+		status = qglCheckFramebufferStatus(GL_FRAMEBUFFER);
+		qglBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		if (status != GL_FRAMEBUFFER_COMPLETE)
+		{
+			VR_Log("VR: incomplete eye framebuffer: 0x%x\n", status);
+			return false;
+		}
+	}
+
+	/*
+		The target the engine actually renders into. One per eye is enough
+		because it is resolved into the swapchain image before the eye ends.
+
+		sRGB, matching the swapchain image, so the resolve is between two
+		buffers of the same encoding - which is what their implicit resolve
+		effectively is too.
+	*/
+	qglGenRenderbuffers(1, &frameBuffer->MsaaColour);
+	qglBindRenderbuffer(GL_RENDERBUFFER, frameBuffer->MsaaColour);
+
+	if (frameBuffer->Multisamples > 1 && qglRenderbufferStorageMultisample)
+	{
+		qglRenderbufferStorageMultisample(GL_RENDERBUFFER, frameBuffer->Multisamples,
+				GL_SRGB8_ALPHA8, width, height);
+	}
+	else
+	{
+		frameBuffer->Multisamples = 1;
+		qglRenderbufferStorage(GL_RENDERBUFFER, GL_SRGB8_ALPHA8, width, height);
+	}
+
+	qglGenRenderbuffers(1, &frameBuffer->MsaaDepth);
+	qglBindRenderbuffer(GL_RENDERBUFFER, frameBuffer->MsaaDepth);
+
+	if (frameBuffer->Multisamples > 1)
+	{
+		qglRenderbufferStorageMultisample(GL_RENDERBUFFER, frameBuffer->Multisamples,
+				GL_DEPTH_COMPONENT24, width, height);
+	}
+	else
+	{
+		qglRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
+	}
+
+	qglBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+	qglGenFramebuffers(1, &frameBuffer->MsaaFrameBuffer);
+	qglBindFramebuffer(GL_FRAMEBUFFER, frameBuffer->MsaaFrameBuffer);
+	qglFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+			GL_RENDERBUFFER, frameBuffer->MsaaColour);
+	qglFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+			GL_RENDERBUFFER, frameBuffer->MsaaDepth);
+
+	if (qglCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+	{
+		VR_Log("VR: incomplete multisample framebuffer\n");
+		qglBindFramebuffer(GL_FRAMEBUFFER, 0);
+		return false;
+	}
+
+	qglBindFramebuffer(GL_FRAMEBUFFER, 0);
+	VR_Log("VR: eye framebuffer %dx%d, %d samples, %d swapchain images\n",
+			width, height, frameBuffer->Multisamples, frameBuffer->TextureSwapChainLength);
+	return true;
+}
+
+static void ovrFramebuffer_Destroy(ovrFramebuffer *frameBuffer)
+{
+	if (frameBuffer->FrameBuffers)
+		qglDeleteFramebuffers(frameBuffer->TextureSwapChainLength, frameBuffer->FrameBuffers);
+	if (frameBuffer->MsaaFrameBuffer)
+		qglDeleteFramebuffers(1, &frameBuffer->MsaaFrameBuffer);
+	if (frameBuffer->MsaaColour)
+		qglDeleteRenderbuffers(1, &frameBuffer->MsaaColour);
+	if (frameBuffer->MsaaDepth)
+		qglDeleteRenderbuffers(1, &frameBuffer->MsaaDepth);
+	if (frameBuffer->ColorSwapChain.Handle != XR_NULL_HANDLE)
+		OXR(xrDestroySwapchain(frameBuffer->ColorSwapChain.Handle));
+
+	free(frameBuffer->ColorSwapChainImage);
+	free(frameBuffer->FrameBuffers);
+	ovrFramebuffer_Clear(frameBuffer);
+}
+
+static void ovrFramebuffer_SetCurrent(ovrFramebuffer *frameBuffer)
+{
+	qglBindFramebuffer(GL_FRAMEBUFFER, frameBuffer->MsaaFrameBuffer);
+}
+
+static void ovrFramebuffer_SetNone(void)
+{
+	qglBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+/*
+	The step their GLES extension performed implicitly.
+
+	sRGB encoding on write is disabled deliberately: the conversion that
+	matters happens on read, and is decided by the multisample buffer's
+	format.
+*/
+static void ovrFramebuffer_Resolve(ovrFramebuffer *frameBuffer)
+{
+	qglDisable(GL_FRAMEBUFFER_SRGB);
+
+	qglBindFramebuffer(GL_READ_FRAMEBUFFER, frameBuffer->MsaaFrameBuffer);
+	qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, frameBuffer->FrameBuffers[frameBuffer->TextureSwapChainIndex]);
+	qglBlitFramebuffer(0, 0, frameBuffer->Width, frameBuffer->Height,
+			0, 0, frameBuffer->Width, frameBuffer->Height,
+			GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	qglBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+	qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+}
+
+static void ovrFramebuffer_Acquire(ovrFramebuffer *frameBuffer)
+{
+	XrSwapchainImageAcquireInfo acquireInfo = {XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO, NULL};
+	XrSwapchainImageWaitInfo waitInfo;
+	XrResult res;
+
+	OXR(xrAcquireSwapchainImage(
+			frameBuffer->ColorSwapChain.Handle, &acquireInfo, &frameBuffer->TextureSwapChainIndex));
+
+	waitInfo.type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO;
+	waitInfo.next = NULL;
+	waitInfo.timeout = 1000000000; /* nanoseconds */
+
+	res = xrWaitSwapchainImage(frameBuffer->ColorSwapChain.Handle, &waitInfo);
+	while (res == XR_TIMEOUT_EXPIRED)
+	{
+		Con_DPrintf("VR: retrying xrWaitSwapchainImage after XR_TIMEOUT_EXPIRED\n");
+		res = xrWaitSwapchainImage(frameBuffer->ColorSwapChain.Handle, &waitInfo);
+	}
+}
+
+static void ovrFramebuffer_Release(ovrFramebuffer *frameBuffer)
+{
+	XrSwapchainImageReleaseInfo releaseInfo = {XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO, NULL};
+	OXR(xrReleaseSwapchainImage(frameBuffer->ColorSwapChain.Handle, &releaseInfo));
+}
+
+static void ovrRenderer_Create(XrSession session, ovrRenderer *renderer, int width, int height)
+{
+	int eye;
+
+	for (eye = 0; eye < ovrMaxNumEyes; eye++)
+	{
+		ovrFramebuffer_Create(session, &renderer->FrameBuffer[eye],
+				GL_SRGB8_ALPHA8, width, height, NUM_MULTI_SAMPLES);
+	}
+}
+
+static void ovrRenderer_Destroy(ovrRenderer *renderer)
+{
+	int eye;
+
+	for (eye = 0; eye < ovrMaxNumEyes; eye++)
+		ovrFramebuffer_Destroy(&renderer->FrameBuffer[eye]);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Session state and events - theirs, with the Android hints removed          */
+/* ------------------------------------------------------------------------ */
+
+static void ovrApp_HandleSessionStateChanges(ovrApp *app, XrSessionState state)
+{
+	if (state == XR_SESSION_STATE_READY)
+	{
+		XrSessionBeginInfo sessionBeginInfo;
+		XrResult result;
+
+		memset(&sessionBeginInfo, 0, sizeof(sessionBeginInfo));
+		sessionBeginInfo.type = XR_TYPE_SESSION_BEGIN_INFO;
+		sessionBeginInfo.next = NULL;
+		sessionBeginInfo.primaryViewConfigurationType = app->ViewportConfig.viewConfigurationType;
+
+		OXR(result = xrBeginSession(app->Session, &sessionBeginInfo));
+		app->SessionActive = (result == XR_SUCCESS);
+		VR_Log("VR: session begun (%s)\n", app->SessionActive ? "active" : "failed");
+	}
+	else if (state == XR_SESSION_STATE_STOPPING)
+	{
+		OXR(xrEndSession(app->Session));
+		app->SessionActive = false;
+		VR_Log("VR: session stopping\n");
+	}
+}
+
+static GLboolean ovrApp_HandleXrEvents(ovrApp *app)
+{
+	XrEventDataBuffer eventDataBuffer = {};
+	GLboolean recenter = GL_FALSE;
+
+	for (;;)
+	{
+		XrEventDataBaseHeader *baseEventHeader = (XrEventDataBaseHeader *)(&eventDataBuffer);
+		XrResult r;
+
+		baseEventHeader->type = XR_TYPE_EVENT_DATA_BUFFER;
+		baseEventHeader->next = NULL;
+
+		r = xrPollEvent(app->Instance, &eventDataBuffer);
+		if (r != XR_SUCCESS)
+			break;
+
+		switch (baseEventHeader->type)
+		{
+		case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING:
+			VR_Log("VR: instance loss pending\n");
+			break;
+
+		case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
+			recenter = GL_TRUE;
+			break;
+
+		case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED:
+			{
+				const XrEventDataSessionStateChanged *ev =
+						(XrEventDataSessionStateChanged *)(baseEventHeader);
+
+				switch (ev->state)
+				{
+				case XR_SESSION_STATE_FOCUSED:
+					app->Focused = true;
+					break;
+				case XR_SESSION_STATE_VISIBLE:
+					app->Visible = true;
+					break;
+				case XR_SESSION_STATE_READY:
+				case XR_SESSION_STATE_STOPPING:
+					ovrApp_HandleSessionStateChanges(app, ev->state);
+					break;
+				case XR_SESSION_STATE_EXITING:
+				case XR_SESSION_STATE_LOSS_PENDING:
+					VR_Log("VR: runtime asked the session to exit\n");
+					Cbuf_AddText("quit\n");
+					break;
+				default:
+					break;
+				}
+			}
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	return recenter;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Instance, system and eye resolution                                       */
+/* ------------------------------------------------------------------------ */
+
+static bool TBXR_AddExtensionIfAvailable(
+		const XrExtensionProperties *available,
+		uint32_t availableCount,
+		const char *name,
+		const char **enabled,
+		uint32_t *enabledCount)
+{
+	uint32_t i;
+
+	for (i = 0; i < availableCount; i++)
+	{
+		if (!strcmp(available[i].extensionName, name))
+		{
+			enabled[(*enabledCount)++] = name;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void TBXR_InitialiseResolution(void)
+{
+	uint32_t viewCount = 0;
+
+	gAppState.ViewportConfig.type = XR_TYPE_VIEW_CONFIGURATION_PROPERTIES;
+	OXR(xrGetViewConfigurationProperties(gAppState.Instance, gAppState.SystemId,
+			XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, &gAppState.ViewportConfig));
+
+	OXR(xrEnumerateViewConfigurationViews(gAppState.Instance, gAppState.SystemId,
+			XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 0, &viewCount, NULL));
+
+	if (viewCount != ovrMaxNumEyes)
+	{
+		VR_Log("VR: expected %d views, runtime reports %u\n", ovrMaxNumEyes, viewCount);
+		return;
+	}
+
+	{
+		uint32_t e;
+
+		for (e = 0; e < viewCount; e++)
+		{
+			gAppState.ViewConfigurationView[e].type = XR_TYPE_VIEW_CONFIGURATION_VIEW;
+			gAppState.ViewConfigurationView[e].next = NULL;
+		}
+
+		OXR(xrEnumerateViewConfigurationViews(gAppState.Instance, gAppState.SystemId,
+				XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, viewCount, &viewCount,
+				gAppState.ViewConfigurationView));
+	}
+
+	// Theirs, including the multiplier and the use of eye 0 for both.
+	gAppState.Width = gAppState.ViewConfigurationView[0].recommendedImageRectWidth * SS_MULTIPLIER;
+	gAppState.Height = gAppState.ViewConfigurationView[0].recommendedImageRectHeight * SS_MULTIPLIER;
+
+	VR_Log("VR: runtime recommends %ux%u per eye, x%.2f supersampling gives %dx%d\n",
+			gAppState.ViewConfigurationView[0].recommendedImageRectWidth,
+			gAppState.ViewConfigurationView[0].recommendedImageRectHeight,
+			SS_MULTIPLIER, (int)gAppState.Width, (int)gAppState.Height);
+}
+
+bool TBXR_InitialiseInstance(void)
+{
+	XrApplicationInfo appInfo;
+	XrInstanceCreateInfo instanceCreateInfo;
+	XrExtensionProperties *availableExtensions;
+	const char *enabledExtensions[16];
+	uint32_t enabledExtensionCount = 0;
+	uint32_t availableExtensionCount = 0;
+	XrInstanceProperties instanceInfo;
+	XrSystemGetInfo systemGetInfo;
+	XrResult initResult;
+	uint32_t i;
+	PFN_xrGetOpenGLGraphicsRequirementsKHR pfnGetOpenGLGraphicsRequirementsKHR = NULL;
+	XrGraphicsRequirementsOpenGLKHR graphicsRequirements = {XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR};
+
+	memset(&gAppState, 0, sizeof(gAppState));
+	gAppState.OpenXRHMD = "";
+
+	OXR(xrEnumerateInstanceExtensionProperties(NULL, 0, &availableExtensionCount, NULL));
+	availableExtensions = (XrExtensionProperties *)calloc(availableExtensionCount, sizeof(XrExtensionProperties));
+	for (i = 0; i < availableExtensionCount; ++i)
+		availableExtensions[i].type = XR_TYPE_EXTENSION_PROPERTIES;
+	OXR(xrEnumerateInstanceExtensionProperties(NULL, availableExtensionCount,
+			&availableExtensionCount, availableExtensions));
+
+	/*
+		Their list, minus everything Android-only. XR_KHR_opengl_enable takes
+		the place of XR_KHR_opengl_es_enable and is the one extension that must
+		be present; the rest are optional there and here.
+	*/
+	if (!TBXR_AddExtensionIfAvailable(availableExtensions, availableExtensionCount,
+			XR_KHR_OPENGL_ENABLE_EXTENSION_NAME, enabledExtensions, &enabledExtensionCount))
+	{
+		VR_Log("VR: the OpenXR runtime does not support " XR_KHR_OPENGL_ENABLE_EXTENSION_NAME "\n");
+		free(availableExtensions);
+		return false;
+	}
+
+	TBXR_AddExtensionIfAvailable(availableExtensions, availableExtensionCount,
+			XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME, enabledExtensions, &enabledExtensionCount);
+	TBXR_AddExtensionIfAvailable(availableExtensions, availableExtensionCount,
+			XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME, enabledExtensions, &enabledExtensionCount);
+	TBXR_AddExtensionIfAvailable(availableExtensions, availableExtensionCount,
+			XR_FB_COLOR_SPACE_EXTENSION_NAME, enabledExtensions, &enabledExtensionCount);
+
+	memset(&appInfo, 0, sizeof(appInfo));
+	strlcpy(appInfo.applicationName, "QuakeQuest", sizeof(appInfo.applicationName));
+	appInfo.applicationVersion = 0;
+	strlcpy(appInfo.engineName, "QuakeQuest", sizeof(appInfo.engineName));
+	appInfo.engineVersion = 0;
+	appInfo.apiVersion = XR_API_VERSION_1_0;
+
+	memset(&instanceCreateInfo, 0, sizeof(instanceCreateInfo));
+	instanceCreateInfo.type = XR_TYPE_INSTANCE_CREATE_INFO;
+	instanceCreateInfo.next = NULL;
+	instanceCreateInfo.createFlags = 0;
+	instanceCreateInfo.applicationInfo = appInfo;
+	instanceCreateInfo.enabledApiLayerCount = 0;
+	instanceCreateInfo.enabledApiLayerNames = NULL;
+	instanceCreateInfo.enabledExtensionCount = enabledExtensionCount;
+	instanceCreateInfo.enabledExtensionNames = enabledExtensions;
+
+	initResult = xrCreateInstance(&instanceCreateInfo, &gAppState.Instance);
+	free(availableExtensions);
+
+	if (initResult != XR_SUCCESS)
+	{
+		VR_Log("VR: failed to create an OpenXR instance (%d) - is a runtime installed and running?\n",
+				(int)initResult);
+		gAppState.Instance = XR_NULL_HANDLE;
+		return false;
+	}
+
+	instanceInfo.type = XR_TYPE_INSTANCE_PROPERTIES;
+	instanceInfo.next = NULL;
+	OXR(xrGetInstanceProperties(gAppState.Instance, &instanceInfo));
+	VR_Log("VR: runtime %s %u.%u.%u\n", instanceInfo.runtimeName,
+			XR_VERSION_MAJOR(instanceInfo.runtimeVersion),
+			XR_VERSION_MINOR(instanceInfo.runtimeVersion),
+			XR_VERSION_PATCH(instanceInfo.runtimeVersion));
+
+	// Theirs, and still useful: the game half keys a couple of behaviours off it.
+	if (strstr(instanceInfo.runtimeName, "PICO") || strstr(instanceInfo.runtimeName, "Pico") ||
+			strstr(instanceInfo.runtimeName, "pico"))
+		gAppState.OpenXRHMD = "pico";
+	else if (strstr(instanceInfo.runtimeName, "Oculus") || strstr(instanceInfo.runtimeName, "Meta") ||
+			strstr(instanceInfo.runtimeName, "meta"))
+		gAppState.OpenXRHMD = "meta";
+
+	memset(&systemGetInfo, 0, sizeof(systemGetInfo));
+	systemGetInfo.type = XR_TYPE_SYSTEM_GET_INFO;
+	systemGetInfo.next = NULL;
+	systemGetInfo.formFactor = XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
+
+	initResult = xrGetSystem(gAppState.Instance, &systemGetInfo, &gAppState.SystemId);
+	if (initResult != XR_SUCCESS)
+	{
+		VR_Log("VR: no head mounted display available (%d)\n", (int)initResult);
+		xrDestroyInstance(gAppState.Instance);
+		gAppState.Instance = XR_NULL_HANDLE;
+		return false;
+	}
+
+	/*
+		Required before xrCreateSession, and it is the call that tells the
+		runtime we mean desktop GL rather than GLES. The reported version
+		range is not enforced here, exactly as on their side.
+	*/
+	OXR(xrGetInstanceProcAddr(gAppState.Instance, "xrGetOpenGLGraphicsRequirementsKHR",
+			(PFN_xrVoidFunction *)(&pfnGetOpenGLGraphicsRequirementsKHR)));
+	if (pfnGetOpenGLGraphicsRequirementsKHR)
+		OXR(pfnGetOpenGLGraphicsRequirementsKHR(gAppState.Instance, gAppState.SystemId, &graphicsRequirements));
+
+	TBXR_InitialiseResolution();
+	return true;
+}
+
+void TBXR_GetEyeResolution(int *width, int *height)
+{
+	*width = (int)gAppState.Width;
+	*height = (int)gAppState.Height;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Session and spaces                                                        */
+/* ------------------------------------------------------------------------ */
+
+void TBXR_Recenter(void)
+{
+	XrReferenceSpaceCreateInfo spaceCreateInfo = {};
+
+	spaceCreateInfo.type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO;
+	spaceCreateInfo.poseInReferenceSpace.orientation.w = 1.0f;
+
+	if (gAppState.StageSpace != XR_NULL_HANDLE)
+		OXR(xrDestroySpace(gAppState.StageSpace));
+	if (gAppState.FakeStageSpace != XR_NULL_HANDLE)
+		OXR(xrDestroySpace(gAppState.FakeStageSpace));
+
+	gAppState.StageSpace = XR_NULL_HANDLE;
+	gAppState.FakeStageSpace = XR_NULL_HANDLE;
+
+	// A default stage to use when STAGE is unsupported. Their 1.675m offset.
+	spaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
+	spaceCreateInfo.poseInReferenceSpace.position.y = -1.6750f;
+	OXR(xrCreateReferenceSpace(gAppState.Session, &spaceCreateInfo, &gAppState.FakeStageSpace));
+	gAppState.CurrentSpace = gAppState.FakeStageSpace;
+
+	if (stageSupported)
+	{
+		spaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
+		spaceCreateInfo.poseInReferenceSpace.position.y = 0.0f;
+		OXR(xrCreateReferenceSpace(gAppState.Session, &spaceCreateInfo, &gAppState.StageSpace));
+		gAppState.CurrentSpace = gAppState.StageSpace;
+	}
+}
+
+bool TBXR_EnterVR(void)
+{
+	XrGraphicsBindingOpenGLWin32KHR graphicsBinding = {};
+	XrSessionCreateInfo sessionCreateInfo = {};
+	XrReferenceSpaceCreateInfo spaceCreateInfo = {};
+	XrResult initResult;
+
+	if (gAppState.Session)
+		return true;
+
+	/*
+		The whole platform seam, in four lines. Their EGL display, surface and
+		context become the device context and render context SDL already made
+		for the engine's window. Both must be current on this thread, which
+		they are: the engine creates them during Host_Init and never makes
+		them current anywhere else.
+	*/
+	graphicsBinding.type = XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR;
+	graphicsBinding.next = NULL;
+	graphicsBinding.hDC = wglGetCurrentDC();
+	graphicsBinding.hGLRC = wglGetCurrentContext();
+
+	if (!graphicsBinding.hDC || !graphicsBinding.hGLRC)
+	{
+		Con_Printf("VR: no current OpenGL context to bind the session to\n");
+		return false;
+	}
+
+	sessionCreateInfo.type = XR_TYPE_SESSION_CREATE_INFO;
+	sessionCreateInfo.next = &graphicsBinding;
+	sessionCreateInfo.createFlags = 0;
+	sessionCreateInfo.systemId = gAppState.SystemId;
+
+	initResult = xrCreateSession(gAppState.Instance, &sessionCreateInfo, &gAppState.Session);
+	if (initResult != XR_SUCCESS)
+	{
+		Con_Printf("VR: failed to create the OpenXR session (%d)\n", (int)initResult);
+		gAppState.Session = XR_NULL_HANDLE;
+		return false;
+	}
+
+	spaceCreateInfo.type = XR_TYPE_REFERENCE_SPACE_CREATE_INFO;
+	spaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
+	spaceCreateInfo.poseInReferenceSpace.orientation.w = 1.0f;
+	OXR(xrCreateReferenceSpace(gAppState.Session, &spaceCreateInfo, &gAppState.HeadSpace));
+
+	return true;
+}
+
+void TBXR_LeaveVR(void)
+{
+	if (gAppState.Session)
+	{
+		ovrRenderer_Destroy(&gAppState.Renderer);
+		free(gAppState.Projections);
+		gAppState.Projections = NULL;
+
+		if (gAppState.HeadSpace != XR_NULL_HANDLE)
+			OXR(xrDestroySpace(gAppState.HeadSpace));
+		if (gAppState.StageSpace != XR_NULL_HANDLE)
+			OXR(xrDestroySpace(gAppState.StageSpace));
+		if (gAppState.FakeStageSpace != XR_NULL_HANDLE)
+			OXR(xrDestroySpace(gAppState.FakeStageSpace));
+
+		gAppState.CurrentSpace = XR_NULL_HANDLE;
+		OXR(xrDestroySession(gAppState.Session));
+		gAppState.Session = XR_NULL_HANDLE;
+	}
+
+	if (gAppState.Instance != XR_NULL_HANDLE)
+	{
+		OXR(xrDestroyInstance(gAppState.Instance));
+		gAppState.Instance = XR_NULL_HANDLE;
+	}
+}
+
+void TBXR_InitRenderer(void)
+{
+	uint32_t numOutputSpaces = 0;
+	XrReferenceSpaceType *referenceSpaces;
+	uint32_t i;
+	int eye;
+
+	OXR(xrEnumerateReferenceSpaces(gAppState.Session, 0, &numOutputSpaces, NULL));
+	referenceSpaces = (XrReferenceSpaceType *)malloc(numOutputSpaces * sizeof(XrReferenceSpaceType));
+	OXR(xrEnumerateReferenceSpaces(gAppState.Session, numOutputSpaces, &numOutputSpaces, referenceSpaces));
+
+	for (i = 0; i < numOutputSpaces; i++)
+	{
+		if (referenceSpaces[i] == XR_REFERENCE_SPACE_TYPE_STAGE)
+		{
+			stageSupported = GL_TRUE;
+			break;
+		}
+	}
+
+	free(referenceSpaces);
+
+	if (gAppState.CurrentSpace == XR_NULL_HANDLE)
+		TBXR_Recenter();
+
+	gAppState.Projections = (XrView *)malloc(ovrMaxNumEyes * sizeof(XrView));
+	for (eye = 0; eye < ovrMaxNumEyes; eye++)
+	{
+		memset(&gAppState.Projections[eye], 0, sizeof(XrView));
+		gAppState.Projections[eye].type = XR_TYPE_VIEW;
+	}
+
+	ovrRenderer_Create(gAppState.Session, &gAppState.Renderer,
+			(int)gAppState.Width, (int)gAppState.Height);
+}
+
+void TBXR_WaitForSessionActive(void)
+{
+	// Theirs waits forever, which is safe on Android where the app cannot be
+	// running without a headset. Here a runtime that never sends
+	// XR_SESSION_STATE_READY would hang the process with nothing on screen,
+	// so give up after twenty seconds and let the frame loop keep trying.
+	int waited;
+
+	for (waited = 0; !gAppState.SessionActive && waited < 20000; waited++)
+	{
+		if (ovrApp_HandleXrEvents(&gAppState))
+			TBXR_Recenter();
+
+		Sys_Sleep(1000);
+	}
+
+	if (!gAppState.SessionActive)
+		Con_Printf("VR: the session did not become active within 20 seconds\n");
+}
+
+int TBXR_GetRefresh(void)
+{
+	// Their value comes from XR_FB_display_refresh_rate, which desktop
+	// runtimes generally do not offer. REFRESH is their command line
+	// override; 72 is what a Quest reports and what stock's sys_ticrate
+	// default of 0.0138889 works out to.
+	if (gAppState.currentDisplayRefreshRate > 1.0f)
+		return (int)gAppState.currentDisplayRefreshRate;
+
+	return REFRESH > 0 ? REFRESH : 72;
+}
+
+/* ------------------------------------------------------------------------ */
+/* The frame                                                                 */
+/* ------------------------------------------------------------------------ */
+
+static void TBXR_GetHMDOrientation(void)
+{
+	XrSpaceLocation loc = {};
+	vec3_t rotation = {0, 0, 0};
+	vec3_t orientation = {0, 0, 0};
+
+	if (gAppState.FrameState.predictedDisplayTime == 0)
+		return;
+
+	loc.type = XR_TYPE_SPACE_LOCATION;
+	OXR(xrLocateSpace(gAppState.HeadSpace, gAppState.CurrentSpace,
+			gAppState.FrameState.predictedDisplayTime, &loc));
+	gAppState.xfStageFromHead = loc.pose;
+
+	QuatToYawPitchRoll(gAppState.xfStageFromHead.orientation, rotation, orientation);
+	VR_SetHMDPosition(gAppState.xfStageFromHead.position.x,
+			gAppState.xfStageFromHead.position.y,
+			gAppState.xfStageFromHead.position.z);
+	VR_SetHMDOrientation(orientation[0], orientation[1], orientation[2]);
+}
+
+void TBXR_FrameSetup(void)
+{
+	XrFrameBeginInfo beginFrameDesc = {};
+
+	if (gAppState.FrameSetup)
+		return;
+
+	for (;;)
+	{
+		if (ovrApp_HandleXrEvents(&gAppState))
+			TBXR_Recenter();
+
+		if (gAppState.SessionActive == GL_FALSE)
+		{
+			// Their loop spins here; on PC that would peg a core, and the
+			// engine still wants to run so the desktop window stays alive.
+			Sys_Sleep(1000);
+			continue;
+		}
+
+		break;
+	}
+
+	memset(&(gAppState.FrameState), 0, sizeof(XrFrameState));
+	gAppState.FrameState.type = XR_TYPE_FRAME_STATE;
+	OXR(xrWaitFrame(gAppState.Session, NULL, &gAppState.FrameState));
+
+	beginFrameDesc.type = XR_TYPE_FRAME_BEGIN_INFO;
+	beginFrameDesc.next = NULL;
+	OXR(xrBeginFrame(gAppState.Session, &beginFrameDesc));
+
+	VR_FrameSetup();
+
+	TBXR_GetHMDOrientation();
+	VR_HandleControllerInput();
+	TBXR_ProcessHaptics();
+
+	gAppState.FrameSetup = true;
+}
+
+static void TBXR_ClearFrameBuffer(int width, int height)
+{
+	qglEnable(GL_SCISSOR_TEST);
+	qglViewport(0, 0, width, height);
+
+	qglClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+	qglScissor(0, 0, width, height);
+	qglClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	qglScissor(0, 0, 0, 0);
+	qglDisable(GL_SCISSOR_TEST);
+
+	// Theirs: the engine works in linear RGB, so never encode on write.
+	qglDisable(GL_FRAMEBUFFER_SRGB);
+}
+
+void TBXR_prepareEyeBuffer(int eye)
+{
+	ovrFramebuffer *frameBuffer = &(gAppState.Renderer.FrameBuffer[eye]);
+
+	ovrFramebuffer_Acquire(frameBuffer);
+	ovrFramebuffer_SetCurrent(frameBuffer);
+	TBXR_ClearFrameBuffer(frameBuffer->Width, frameBuffer->Height);
+}
+
+void TBXR_finishEyeBuffer(int eye)
+{
+	ovrFramebuffer *frameBuffer = &(gAppState.Renderer.FrameBuffer[eye]);
+
+	// Theirs: without a solid alpha channel the runtime will not take the
+	// whole image.
+	qglColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+	qglClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	qglClear(GL_COLOR_BUFFER_BIT);
+	qglColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+	ovrFramebuffer_Resolve(frameBuffer);
+	ovrFramebuffer_Release(frameBuffer);
+	ovrFramebuffer_SetNone();
+}
+
+static void TBXR_updateProjections(void)
+{
+	XrViewLocateInfo projectionInfo = {};
+	XrViewState viewState = {XR_TYPE_VIEW_STATE, NULL};
+	uint32_t projectionCapacityInput = ovrMaxNumEyes;
+	uint32_t projectionCountOutput = projectionCapacityInput;
+
+	projectionInfo.type = XR_TYPE_VIEW_LOCATE_INFO;
+	projectionInfo.viewConfigurationType = gAppState.ViewportConfig.viewConfigurationType;
+	projectionInfo.displayTime = gAppState.FrameState.predictedDisplayTime;
+	projectionInfo.space = gAppState.HeadSpace;
+
+	OXR(xrLocateViews(gAppState.Session, &projectionInfo, &viewState,
+			projectionCapacityInput, &projectionCountOutput, gAppState.Projections));
+}
+
+/*
+	Mirror the left eye into the desktop window.
+
+	Their build has no desktop window at all, so this has no counterpart on
+	their side. It exists because a PC game that shows nothing on the monitor
+	is unpleasant to run, and because it is the only way to see what the
+	headset sees while debugging.
+*/
+static void TBXR_MirrorToWindow(void)
+{
+	ovrFramebuffer *frameBuffer = &gAppState.Renderer.FrameBuffer[0];
+
+	if (vid_mirrorwidth <= 0 || vid_mirrorheight <= 0)
+		return;
+
+	qglDisable(GL_FRAMEBUFFER_SRGB);
+	qglBindFramebuffer(GL_READ_FRAMEBUFFER, frameBuffer->MsaaFrameBuffer);
+	qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	qglBlitFramebuffer(0, 0, frameBuffer->Width, frameBuffer->Height,
+			0, 0, vid_mirrorwidth, vid_mirrorheight,
+			GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	qglBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+	qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+}
+
+void TBXR_submitFrame(void)
+{
+	XrPosef stageFromEye[2];
+	XrCompositionLayerProjectionView projection_layer_elements[2] = {};
+	const XrCompositionLayerBaseHeader *layers[ovrMaxLayerCount] = {};
+	XrFrameEndInfo endFrameInfo = {};
+	int eye, i;
+
+	if (gAppState.SessionActive == GL_FALSE)
+		return;
+
+	TBXR_updateProjections();
+
+	{
+		// Theirs. GetFOV feeds the engine's symmetric frustum, which is only
+		// used on the big screen now that VR_GetMaxFovTangents covers the
+		// stereo path - so the average of the two eyes is the right answer.
+		XrFovf fov = {};
+
+		for (eye = 0; eye < ovrMaxNumEyes; eye++)
+		{
+			fov.angleLeft += gAppState.Projections[eye].fov.angleLeft / 2.0f;
+			fov.angleRight += gAppState.Projections[eye].fov.angleRight / 2.0f;
+			fov.angleUp += gAppState.Projections[eye].fov.angleUp / 2.0f;
+			fov.angleDown += gAppState.Projections[eye].fov.angleDown / 2.0f;
+		}
+
+		fov_y = (fabs(fov.angleUp) + fabs(fov.angleDown)) * 180.0f / M_PI;
+	}
+
+	for (eye = 0; eye < ovrMaxNumEyes; eye++)
+	{
+		XrPosef xfHeadFromEye = gAppState.Projections[eye].pose;
+		stageFromEye[eye] = XrPosef_Multiply(gAppState.xfStageFromHead, xfHeadFromEye);
+	}
+
+	TBXR_MirrorToWindow();
+
+	gAppState.LayerCount = 0;
+	memset(gAppState.Layers, 0, sizeof(xrCompositorLayer_Union) * ovrMaxLayerCount);
+
+	if (!VR_UseScreenLayer())
+	{
+		XrCompositionLayerProjection projection_layer = {};
+
+		projection_layer.type = XR_TYPE_COMPOSITION_LAYER_PROJECTION;
+		projection_layer.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+		projection_layer.layerFlags |= XR_COMPOSITION_LAYER_CORRECT_CHROMATIC_ABERRATION_BIT;
+		projection_layer.space = gAppState.CurrentSpace;
+		projection_layer.viewCount = ovrMaxNumEyes;
+		projection_layer.views = projection_layer_elements;
+
+		for (eye = 0; eye < ovrMaxNumEyes; eye++)
+		{
+			ovrFramebuffer *frameBuffer = &gAppState.Renderer.FrameBuffer[eye];
+
+			memset(&projection_layer_elements[eye], 0, sizeof(XrCompositionLayerProjectionView));
+			projection_layer_elements[eye].type = XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW;
+			// Must match what the game rendered with, which is the per eye
+			// view the runtime reported.
+			projection_layer_elements[eye].pose = stageFromEye[eye];
+			projection_layer_elements[eye].fov = gAppState.Projections[eye].fov;
+			projection_layer_elements[eye].subImage.swapchain = frameBuffer->ColorSwapChain.Handle;
+			projection_layer_elements[eye].subImage.imageRect.offset.x = 0;
+			projection_layer_elements[eye].subImage.imageRect.offset.y = 0;
+			projection_layer_elements[eye].subImage.imageRect.extent.width = frameBuffer->ColorSwapChain.Width;
+			projection_layer_elements[eye].subImage.imageRect.extent.height = frameBuffer->ColorSwapChain.Height;
+			projection_layer_elements[eye].subImage.imageArrayIndex = 0;
+		}
+
+		gAppState.Layers[gAppState.LayerCount++].Projection = projection_layer;
+	}
+	else
+	{
+		XrCompositionLayerQuad quad_layer = {};
+		int width = gAppState.Renderer.FrameBuffer[0].ColorSwapChain.Width;
+		int height = gAppState.Renderer.FrameBuffer[0].ColorSwapChain.Height;
+		const XrVector3f axis = {0.0f, 1.0f, 0.0f};
+		XrVector3f pos = {
+				gAppState.xfStageFromHead.position.x - sin(DEG2RAD(playerYaw)) * VR_GetScreenLayerDistance(),
+				1.0f,
+				gAppState.xfStageFromHead.position.z - cos(DEG2RAD(playerYaw)) * VR_GetScreenLayerDistance()
+		};
+		XrExtent2Df size = {5.0f, 4.5f};
+
+		quad_layer.type = XR_TYPE_COMPOSITION_LAYER_QUAD;
+		quad_layer.next = NULL;
+		quad_layer.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
+		quad_layer.space = gAppState.CurrentSpace;
+		quad_layer.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
+		quad_layer.subImage.swapchain = gAppState.Renderer.FrameBuffer[0].ColorSwapChain.Handle;
+		quad_layer.subImage.imageRect.offset.x = 0;
+		quad_layer.subImage.imageRect.offset.y = 0;
+		quad_layer.subImage.imageRect.extent.width = width;
+		quad_layer.subImage.imageRect.extent.height = height;
+		quad_layer.subImage.imageArrayIndex = 0;
+		quad_layer.pose.orientation = XrQuaternionf_CreateFromVectorAngle(axis, DEG2RAD(playerYaw));
+		quad_layer.pose.position = pos;
+		quad_layer.size = size;
+
+		gAppState.Layers[gAppState.LayerCount++].Quad = quad_layer;
+	}
+
+	for (i = 0; i < gAppState.LayerCount; i++)
+		layers[i] = (const XrCompositionLayerBaseHeader *)&gAppState.Layers[i];
+
+	endFrameInfo.type = XR_TYPE_FRAME_END_INFO;
+	endFrameInfo.displayTime = gAppState.FrameState.predictedDisplayTime;
+	endFrameInfo.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
+	endFrameInfo.layerCount = gAppState.LayerCount;
+	endFrameInfo.layers = layers;
+
+	OXR(xrEndFrame(gAppState.Session, &endFrameInfo));
+
+	gAppState.FrameSetup = false;
+}

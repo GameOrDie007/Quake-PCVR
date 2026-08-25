@@ -163,6 +163,7 @@ OBJ_COMMON= \
 	r_lightning.o \
 	r_weaponwheel.o \
 	vr_pc.o \
+	vr_xr.o \
 	r_modules.o \
 	r_shadow.o \
 	r_sky.o \
@@ -308,7 +309,12 @@ OBJ_WGL= builddate.c sys_win.o vid_wgl.o thread_null.o $(OBJ_SND_WIN) $(OBJ_WINC
 # see LDFLAGS_WINCOMMON in makefile
 LDFLAGS_WINCL=$(LDFLAGS_WINCOMMON) $(LIB_CRYPTO) $(LIB_GMP) $(LIB_CRYPTO_RIJNDAEL) -mwindows -lwinmm -luser32 -lgdi32 -ldxguid -ldinput -lcomctl32 -lws2_32 $(LDFLAGS_D3D) $(LIB_JPEG)
 LDFLAGS_WINSV=$(LDFLAGS_WINCOMMON) $(LIB_CRYPTO) $(LIB_GMP) $(LIB_CRYPTO_RIJNDAEL) -mconsole -lwinmm -lws2_32 $(LIB_JPEG)
-LDFLAGS_WINSDL=$(LDFLAGS_WINCOMMON) $(LIB_CRYPTO) $(LIB_GMP) $(LIB_CRYPTO_RIJNDAEL) $(SDLCONFIG_LIBS) $(LIB_SND_MODPLUG) -lwinmm -lws2_32 $(LIB_JPEG)
+# VR: the OpenXR loader, and opengl32 for wglGetCurrentDC and
+# wglGetCurrentContext, which the OpenGL graphics binding needs. The
+# engine resolves GL through SDL and so never linked opengl32 itself.
+LIB_VR=-lopenxr_loader -lopengl32
+
+LDFLAGS_WINSDL=$(LIB_VR) $(LDFLAGS_WINCOMMON) $(LIB_CRYPTO) $(LIB_GMP) $(LIB_CRYPTO_RIJNDAEL) $(SDLCONFIG_LIBS) $(LIB_SND_MODPLUG) -lwinmm -lws2_32 $(LIB_JPEG)
 EXE_WINCL=darkplaces.exe
 EXE_WINSV=darkplaces-dedicated.exe
 EXE_WINSDL=darkplaces-sdl.exe

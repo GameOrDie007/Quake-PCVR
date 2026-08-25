@@ -23,6 +23,18 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 #include "image.h"
 #include "dpsoftrast.h"
+#include "vr_pc.h"
+
+/*
+	The eye buffer size, published by the VR layer before Host_Init, and the
+	real size of the desktop window, published back for the mirror blit. Both
+	are zero when there is no headset, and then nothing below behaves
+	differently from stock.
+*/
+extern int vr_eyewidth;
+extern int vr_eyeheight;
+int vid_mirrorwidth = 0;
+int vid_mirrorheight = 0;
 
 #ifndef __IPHONEOS__
 #ifdef MACOSX
@@ -569,6 +581,17 @@ void IN_Move( void )
 	static int stuck = 0;
 	int x, y;
 	vid_joystate_t joystate;
+
+	/*
+		In VR the head sets the view angles, not the mouse. Their vid_android.c
+		replaces IN_Move outright for this; on PC the same body lives in
+		vr_pc.c and this one stands aside when a session is live.
+	*/
+	if (VR_Enabled())
+	{
+		VR_IN_Move();
+		return;
+	}
 
 	scr_numtouchscreenareas = 0;
 	if (vid_touchscreen.integer)
@@ -2131,14 +2154,50 @@ static qboolean VID_InitModeGL(viddef_mode_t *mode)
 	mode->height = screen->h;
 #else
 	window_flags = windowflags;
-	window = SDL_CreateWindow(gamename, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, mode->width, mode->height, windowflags);
-	if (window == NULL)
+
+	/*
+		In VR the engine's idea of the screen is one eye buffer, because that
+		is what their build renders into and what all the 2D and refdef
+		maths is sized against - their config.cfg records vid_width 3639 for
+		exactly this reason. A window that size on a desktop would be absurd,
+		so the window is made small and mode->width/height are left at the eye
+		size rather than being read back from the window. The window then only
+		ever receives the mirror blit, and its real size lives in
+		vid_mirrorwidth/vid_mirrorheight for that blit to use.
+	*/
+	if (vr_eyewidth > 0 && vr_eyeheight > 0)
 	{
-		Con_Printf("Failed to set video mode to %ix%i: %s\n", mode->width, mode->height, SDL_GetError());
-		VID_Shutdown();
-		return false;
+		float scale;
+
+		mode->width = vr_eyewidth;
+		mode->height = vr_eyeheight;
+
+		scale = min(1280.0f / mode->width, 800.0f / mode->height);
+		vid_mirrorwidth = max(320, (int)(mode->width * scale));
+		vid_mirrorheight = max(240, (int)(mode->height * scale));
+
+		window = SDL_CreateWindow(gamename, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, vid_mirrorwidth, vid_mirrorheight, windowflags);
+		if (window == NULL)
+		{
+			Con_Printf("Failed to create the VR mirror window %ix%i: %s\n", vid_mirrorwidth, vid_mirrorheight, SDL_GetError());
+			VID_Shutdown();
+			return false;
+		}
 	}
-	SDL_GetWindowSize(window, &mode->width, &mode->height);
+	else
+	{
+		window = SDL_CreateWindow(gamename, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, mode->width, mode->height, windowflags);
+		if (window == NULL)
+		{
+			Con_Printf("Failed to set video mode to %ix%i: %s\n", mode->width, mode->height, SDL_GetError());
+			VID_Shutdown();
+			return false;
+		}
+		SDL_GetWindowSize(window, &mode->width, &mode->height);
+		vid_mirrorwidth = mode->width;
+		vid_mirrorheight = mode->height;
+	}
+
 	context = SDL_GL_CreateContext(window);
 	if (context == NULL)
 	{
