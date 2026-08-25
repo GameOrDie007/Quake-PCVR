@@ -1,18 +1,17 @@
 /*
 	vr_pc.c
 
-	PC side of the QuakeQuest VR port.
+	PC side of the QuakeQuest VR port: the engine-facing half.
 
-	Team Beef's VR layer is Android-bound: TBXR_Common.c owns an EGL context
-	and a JNI app thread, QuakeQuest_OpenXR.c is entered from Java, and the
-	engine-facing glue sits in darkplaces/vid_android.c. This file is the PC
-	counterpart of all three. Their maths, their ordering and their tuned
-	values are reproduced; only the platform seam changes.
+	Team Beef split this material between darkplaces/vid_android.c (the QC_*
+	glue) and the game part of QuakeQuestSrc/QuakeQuest_OpenXR.c (the big
+	screen, the projection helpers, the HMD setters, the app thread's loop).
+	Neither has a PC counterpart on their side, so both live here. The OpenXR
+	half is in vr_xr.c.
 
-	At this milestone there is no OpenXR session yet, so every entry point
-	takes its flatscreen path. Those paths are not placeholders - they are what
-	keeps the desktop build working once the headset code lands, and the owner
-	asked for that to be a run-time check rather than a compile-time fork.
+	Every entry point also has a flatscreen path. Those are not placeholders:
+	they keep the desktop build working, which the owner asked for as a
+	run-time check rather than a compile-time fork.
 
 	Copyright (C) 2023 Simon Brown (Team Beef)
 	Copyright (C) 2026 QuakeQuest PCVR port
@@ -24,6 +23,8 @@
 */
 
 #include "quakedef.h"
+#include "glquake.h"
+#include "vr_tbxr.h"
 #include "vr_pc.h"
 
 #include <math.h>
@@ -33,10 +34,9 @@
 
 	Tracking state
 
-	Zeroed, and left that way without a headset. view.c adds
-	(hmdPosition[1] - playerHeight) to the eye height and derives gunorg from
-	weaponOffset, so all-zero means the camera and the gun sit exactly where
-	stock DarkPlaces put them.
+	view.c adds (hmdPosition[1] - playerHeight) to the eye height and derives
+	gunorg from weaponOffset, so all-zero puts the camera and the gun exactly
+	where stock DarkPlaces put them.
 
 ================================================================================
 */
@@ -46,11 +46,24 @@ float hmdorientation[3] = {0.0f, 0.0f, 0.0f};
 float weaponOffset[3] = {0.0f, 0.0f, 0.0f};
 float playerHeight = 0.0f;
 
+// Defined by their view.c, exactly as on their side.
+extern float worldPosition[3];
+
+float positionDeltaThisFrame[3] = {0.0f, 0.0f, 0.0f};
+float playerYaw = -999.0f;
+
 float analogx = 0.0f;
 float analogy = 0.0f;
 int analogenabled = 0;
 
-// Set true when an OpenXR session is running. Nothing sets it yet.
+extern cvar_t vr_worldscale;
+
+// The eye buffer size, read by vid_sdl.c when it opens the window. Zero until
+// an OpenXR instance comes up, and zero for good if none does.
+int vr_eyewidth = 0;
+int vr_eyeheight = 0;
+
+// True once the OpenXR session exists. Set by VR_Startup.
 static qboolean vr_active = false;
 
 qboolean VR_Enabled(void)
@@ -63,8 +76,8 @@ qboolean VR_Enabled(void)
 
 	The big screen
 
-	Menus, the console and demo playback are drawn mono onto a flat quad in
-	front of the player instead of in world space. Theirs, unchanged.
+	Menus, the console and demo playback draw mono onto a flat quad in front of
+	the player instead of in world space. Theirs, unchanged.
 
 ================================================================================
 */
@@ -102,8 +115,8 @@ float VR_GetScreenLayerDistance(void)
 
 	Both became functions because in VR they follow the headset, which is why
 	their cl_screen.c drops the fov cvar and their sv_main.c drops sys_ticrate.
-	The flatscreen values below are not arbitrary: each reproduces exactly what
-	the deleted cvar's default used to produce.
+	The flatscreen values are not arbitrary: each reproduces exactly what the
+	deleted cvar's default used to produce.
 
 ================================================================================
 */
@@ -113,6 +126,7 @@ float VR_GetScreenLayerDistance(void)
 // frustum comes from 2*atan(0.75) degrees.
 #define VR_FLAT_FOV_Y 73.739795f
 
+// Written by TBXR_submitFrame, exactly as in their TBXR_Common.c.
 float fov_y = VR_FLAT_FOV_Y;
 
 float GetFOV(void)
@@ -124,7 +138,7 @@ float GetSysTicrate(void)
 {
 	// Theirs is 1/refresh rate. Stock's sys_ticrate defaulted to 0.0138889,
 	// which is 1/72 - the same number, and the Quest's refresh rate besides.
-	return 1.0f / 72.0f;
+	return vr_active ? (1.0f / (float)TBXR_GetRefresh()) : (1.0f / 72.0f);
 }
 
 /*
@@ -133,35 +147,224 @@ float GetSysTicrate(void)
 	Projection
 
 	An OpenXR frustum is asymmetric and differs per eye, which the engine's
-	symmetric maths does not expect. All three of these return false when there
-	is no live stereo view, and the engine then keeps the matrix it built
-	itself - which is the whole of the flatscreen path.
+	symmetric maths does not expect. All of these return false when there is no
+	live stereo view, and the engine then keeps the matrix it built itself -
+	which is the whole of the flatscreen path, and also the big screen.
+
+	Theirs, from QuakeQuest_OpenXR.c, with GRAPHICS_OPENGL_ES becoming
+	GRAPHICS_OPENGL. xr_linear.h treats the two identically, so this changes
+	nothing but the name.
 
 ================================================================================
 */
 
+static bool VR_EyeViewsValid(void)
+{
+	return (vr_active && gAppState.SessionActive && gAppState.Projections != NULL &&
+			!VR_UseScreenLayer());
+}
+
 bool VR_GetVRProjection(int eye, float zNear, float zFar, float *projection)
 {
-	(void)eye; (void)zNear; (void)zFar; (void)projection;
-	return false;
+	if (!VR_EyeViewsValid())
+		return false;
+
+	XrMatrix4x4f_CreateProjectionFov(
+			&(gAppState.ProjectionMatrices[eye]), GRAPHICS_OPENGL,
+			gAppState.Projections[eye].fov, zNear, zFar);
+
+	memcpy(projection, gAppState.ProjectionMatrices[eye].m, 16 * sizeof(float));
+	return true;
 }
 
+// Widest tangent of either eye on each axis. The engine culls with a single
+// symmetric frustum, so it has to cover the union of both asymmetric eye
+// frusta or geometry pops.
 bool VR_GetMaxFovTangents(float *tanX, float *tanY)
 {
-	(void)tanX; (void)tanY;
-	return false;
+	int eye;
+
+	if (!VR_EyeViewsValid())
+		return false;
+
+	*tanX = 0.0f;
+	*tanY = 0.0f;
+
+	for (eye = 0; eye < ovrMaxNumEyes; eye++)
+	{
+		const XrFovf fov = gAppState.Projections[eye].fov;
+		*tanX = fmaxf(*tanX, fmaxf(fabsf(tanf(fov.angleLeft)), fabsf(tanf(fov.angleRight))));
+		*tanY = fmaxf(*tanY, fmaxf(fabsf(tanf(fov.angleUp)), fabsf(tanf(fov.angleDown))));
+	}
+
+	return (*tanX > 0.0f && *tanY > 0.0f);
 }
 
+// Fraction of the screen a 2D element must move to sit on the eye's forward
+// axis. An asymmetric frustum puts that axis away from the centre of the eye
+// buffer, so a HUD element drawn at the centre of both eye buffers would
+// otherwise diverge.
 bool VR_GetOffCenterFov(int eye, float *offsetX, float *offsetY)
 {
-	(void)eye; (void)offsetX; (void)offsetY;
-	return false;
+	if (!VR_EyeViewsValid())
+		return false;
+
+	{
+		const XrFovf fov = gAppState.Projections[eye].fov;
+		const float l = tanf(fov.angleLeft);
+		const float r = tanf(fov.angleRight);
+		const float u = tanf(fov.angleUp);
+		const float d = tanf(fov.angleDown);
+
+		if ((r - l) < 0.0001f || (u - d) < 0.0001f)
+			return false;
+
+		*offsetX = -(r + l) / (r - l) * 0.5f;
+		// Console coordinates grow downwards, normalised device coordinates
+		// grow upwards.
+		*offsetY = (u + d) / (u - d) * 0.5f;
+	}
+
+	return true;
 }
 
+// Interpupillary distance in metres, measured from the runtime eye poses.
 float VR_GetIPD(void)
 {
-	// Their fallback when the runtime has not reported eye poses.
-	return 0.065f;
+	if (!vr_active || !gAppState.SessionActive || gAppState.Projections == NULL)
+		return 0.065f;
+
+	{
+		const XrVector3f *l = &gAppState.Projections[0].pose.position;
+		const XrVector3f *r = &gAppState.Projections[1].pose.position;
+		const float dx = r->x - l->x;
+		const float dy = r->y - l->y;
+		const float dz = r->z - l->z;
+		const float ipd = sqrtf(dx * dx + dy * dy + dz * dz);
+
+		// A runtime that has not reported a pose yet gives 0, which would
+		// flatten the stereo.
+		return (ipd > 0.02f && ipd < 0.1f) ? ipd : 0.065f;
+	}
+}
+
+/*
+================================================================================
+
+	HMD pose, theirs
+
+================================================================================
+*/
+
+void VR_SetHMDOrientation(float pitch, float yaw, float roll)
+{
+	VectorSet(hmdorientation, pitch, yaw, roll);
+
+	if (!VR_UseScreenLayer() || playerYaw == -999.0f)
+	{
+		playerYaw = yaw;
+	}
+}
+
+void VR_SetHMDPosition(float x, float y, float z)
+{
+	static bool s_useScreen = false;
+
+	positionDeltaThisFrame[0] = (worldPosition[0] - x);
+	positionDeltaThisFrame[1] = (worldPosition[1] - y);
+	positionDeltaThisFrame[2] = (worldPosition[2] - z);
+
+	worldPosition[0] = x;
+	worldPosition[1] = y;
+	worldPosition[2] = z;
+
+	VectorSet(hmdPosition, x, y, z);
+
+	if (s_useScreen != VR_UseScreenLayer())
+	{
+		s_useScreen = VR_UseScreenLayer();
+
+		// Record player height on transition.
+		playerHeight = y;
+	}
+}
+
+/*
+	Their per-game frame hook. Empty in QuakeQuest, and kept so the shape of
+	TBXR_FrameSetup matches theirs.
+*/
+void VR_FrameSetup(void)
+{
+}
+
+/*
+	Head tracking into the view angles.
+
+	Theirs is vid_android.c's QC_MoveEvent and IN_Move, verbatim. On PC
+	IN_Move already belongs to vid_sdl.c and drives mouse look, so that one
+	calls VR_IN_Move instead when a session is live.
+*/
+static struct {
+	float pitch, previous_pitch, yaw, previous_yaw, roll;
+} move_event;
+
+void QC_MoveEvent(float yaw, float pitch, float roll)
+{
+	move_event.previous_yaw = move_event.yaw;
+	move_event.previous_pitch = move_event.pitch;
+	move_event.yaw = yaw * cl_yawmult.value;
+	move_event.pitch = pitch * cl_pitchmult.value;
+	move_event.roll = roll;
+}
+
+void VR_IN_Move(void)
+{
+	cl.viewangles[PITCH] = move_event.pitch;
+
+	if (vr_yawmode.integer == 0)
+	{
+		cl.viewangles[YAW] = move_event.yaw;
+	}
+	else if (vr_yawmode.integer == 1)
+	{
+		cl.viewangles[YAW] += move_event.yaw;
+	}
+	else
+	{
+		cl.viewangles[YAW] -= move_event.previous_yaw;
+		cl.viewangles[YAW] += move_event.yaw;
+	}
+
+	cl.viewangles[ROLL] = move_event.roll;
+}
+
+/*
+================================================================================
+
+	Controller input and haptics
+
+	Not yet brought across - that is their OpenXrInput.c and the input half of
+	QuakeQuest_OpenXR.c, and it is the next milestone. Until then the head
+	tracks and the gun follows the view, which is enough to check stereo,
+	scale and comfort in the headset.
+
+================================================================================
+*/
+
+/*
+	Set true once the controller code lands. Until then the weapon pose is
+	synthesised even in VR, so the headset build is still worth testing: the
+	head tracks, the world is in stereo, and the gun sits where a viewmodel
+	would rather than inside the player's eye.
+*/
+qboolean vr_controller_input = false;
+
+void VR_HandleControllerInput(void)
+{
+}
+
+void TBXR_ProcessHaptics(void)
+{
 }
 
 void TBXR_Vibrate(int duration, int chan, float intensity)
@@ -172,35 +375,24 @@ void TBXR_Vibrate(int duration, int chan, float intensity)
 /*
 ================================================================================
 
-	The frame
+	Weapon pose without a controller
 
-	Their app thread drives the engine rather than the other way round: it
-	calls QC_BeginFrame, then QC_DrawFrame once per eye between the swapchain
-	acquire and release, then QC_EndFrame. Stock DarkPlaces instead had
-	Host_Main own the loop, and their host.c reduces Host_Main to just
-	Host_Init. VR_MainLoop below restores a loop of the shape their app thread
-	has, so the same engine code serves both.
-
-================================================================================
-*/
-
-extern cvar_t vr_worldscale;
-
-/*
 	Their input handler writes gunangles from the controller pose, and view.c
 	builds the viewmodel matrix from gunangles plus a gunorg derived from
 	weaponOffset. Both are world space, because in VR the gun really is an
 	object in the room. With no controller they stay zero, which puts the gun
 	inside the player's eye pointing along yaw zero.
 
-	Flatscreen therefore synthesises a pose: aim along the view, and hold the
-	gun a little forward, right and down of it. view.c reads weaponOffset in
-	metres through a fixed axis remap -
+	So aim along the view, and hold the gun a little forward, right and down of
+	it. view.c reads weaponOffset in metres through a fixed axis remap -
 
 		gunorg = (vieworg.x - wo[2]*s, vieworg.y - wo[0]*s, vieworg.z + wo[1]*s)
 
 	- so the desired world offset is converted back through the same remap.
+
+================================================================================
 */
+
 static void VR_FlatWeaponPose(void)
 {
 	vec3_t forward, right, up, offset;
@@ -223,6 +415,21 @@ static void VR_FlatWeaponPose(void)
 	weaponOffset[1] = offset[2] / scale;
 }
 
+/*
+================================================================================
+
+	The frame
+
+	Their app thread drives the engine rather than the other way round: it
+	calls QC_BeginFrame, then QC_DrawFrame once per eye between the swapchain
+	acquire and release, then QC_EndFrame. Stock DarkPlaces instead had
+	Host_Main own the loop, and their host.c reduces Host_Main to just
+	Host_Init. VR_MainLoop restores a loop of the shape their app thread has,
+	so the same engine code serves both.
+
+================================================================================
+*/
+
 // host.c declares these nowhere, exactly as on their side, where vid_android.c
 // carries the same three prototypes.
 void Host_BeginFrame(bool stopTime);
@@ -236,7 +443,7 @@ void QC_BeginFrame(bool stopTime)
 
 void QC_DrawFrame(int eye, int x, int y)
 {
-	if (!vr_active)
+	if (!vr_controller_input)
 		VR_FlatWeaponPose();
 
 	Host_Frame(eye, x, y);
@@ -247,16 +454,88 @@ void QC_EndFrame(void)
 	Host_EndFrame();
 }
 
+/*
+	Bring OpenXR up once the engine has a window and a GL context.
+
+	The order differs from theirs by necessity. On Android the whole of OpenXR
+	is initialised before the engine starts, because EGL belongs to their app
+	thread. On PC the session has to be bound to the context SDL created during
+	Host_Init, so only the instance - which needs no graphics - can come first.
+	That is enough, because the eye resolution the engine sizes itself to comes
+	from the instance and the system, not the session.
+*/
+qboolean VR_Startup(void)
+{
+	if (!TBXR_EnterVR())
+		return false;
+
+	TBXR_InitRenderer();
+
+	vr_active = true;
+
+	/*
+		The engine still swaps the desktop window once per frame, at the end
+		of CL_EndUpdateScreen. With vsync on, that blocks on the monitor and
+		caps the headset to the monitor's rate - the Quake II port hit exactly
+		this and it looked like a 30fps engine bug. The headset paces the
+		frame through xrWaitFrame instead, so the desktop swap must not.
+		Stock's default is already 0; this makes it so even if a config
+		changed it.
+	*/
+	Cvar_SetValueQuick(&vid_vsync, 0);
+
+	Con_Printf("VR: waiting for the session to become active\n");
+	TBXR_WaitForSessionActive();
+	Con_Printf("VR: session active at %dHz\n", TBXR_GetRefresh());
+
+	return true;
+}
+
 void VR_MainLoop(void)
 {
+	if (!vr_active)
+	{
+		for (;;)
+		{
+			QC_BeginFrame(false);
+
+			// One eye, no offset: the desktop window is a single view.
+			QC_DrawFrame(0, 0, 0);
+
+			QC_EndFrame();
+		}
+	}
+
+	// Theirs, from AppThreadFunction.
 	for (;;)
 	{
+		int eye;
+
+		TBXR_FrameSetup();
+
+		// Their comment: if showing the menu, don't pass head orientation
+		// through - the big screen stays put while you look around it.
+		if (m_state == m_none)
+			QC_MoveEvent(hmdorientation[YAW], hmdorientation[PITCH], hmdorientation[ROLL]);
+		else
+			QC_MoveEvent(0, 0, 0);
+
 		QC_BeginFrame(false);
 
-		// One eye, no offset: the desktop window is a single view. The VR
-		// path will run this once per eye with the eye's framebuffer bound.
-		QC_DrawFrame(0, 0, 0);
+		for (eye = 0; eye < ovrMaxNumEyes; eye++)
+		{
+			TBXR_prepareEyeBuffer(eye);
+
+			if (gAppState.FrameState.shouldRender)
+			{
+				QC_DrawFrame(eye, 0, 0);
+			}
+
+			TBXR_finishEyeBuffer(eye);
+		}
 
 		QC_EndFrame();
+
+		TBXR_submitFrame();
 	}
 }

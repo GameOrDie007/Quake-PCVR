@@ -71,6 +71,18 @@ void QC_BeginFrame(bool stopTime);
 void QC_DrawFrame(int eye, int x, int y);
 void QC_EndFrame(void);
 
+// Head tracking into the view angles. vid_sdl.c's IN_Move calls VR_IN_Move
+// instead of doing mouse look when a session is live.
+void QC_MoveEvent(float yaw, float pitch, float roll);
+void VR_IN_Move(void);
+
+// Brings the session and the eye framebuffers up. Called after Host_Init,
+// because a PC OpenXR session must be bound to a live GL context.
+qboolean VR_Startup(void);
+
+// Replays anything the instance phase printed before the console existed.
+void VR_FlushEarlyLog(void);
+
 // Entered from main() once Host_Init has run. Replaces the loop that stock
 // Host_Main used to own, because their Host_Main now only initialises.
 void VR_MainLoop(void);

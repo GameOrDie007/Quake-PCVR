@@ -17,7 +17,11 @@
 #include <SDL.h>
 
 #include "quakedef.h"
+#include "vr_tbxr.h"
 #include "vr_pc.h"
+
+extern int vr_eyewidth;
+extern int vr_eyeheight;
 
 // =======================================================================
 // General routines
@@ -199,10 +203,30 @@ int main (int argc, char *argv[])
 	// we don't know which systems we'll want to init, yet...
 	SDL_Init(0);
 
+	/*
+		OpenXR comes up in two halves, which their build has no need to do.
+		The instance and the eye resolution need no graphics, so they come
+		first and the engine can size itself to one eye buffer the way their
+		Android build does. The session must wait for the GL context SDL
+		creates inside Host_Init.
+	*/
+	// COMMANDLINEOPTION: vr: -novr skips OpenXR entirely and runs flatscreen
+	if (!COM_CheckParm("-novr") && TBXR_InitialiseInstance())
+		TBXR_GetEyeResolution(&vr_eyewidth, &vr_eyeheight);
+
 	// Their host.c reduces Host_Main to Host_Init, because on Android the app
 	// thread owns the frame loop and calls into the engine. VR_MainLoop is
 	// that loop's PC counterpart and does not return.
 	Host_Main();
+
+	// Whatever the instance phase had to say, said now that it can be read.
+	VR_FlushEarlyLog();
+
+	if (vr_eyewidth > 0 && !VR_Startup())
+	{
+		Con_Printf("VR: startup failed, continuing flatscreen\n");
+	}
+
 	VR_MainLoop();
 
 	return 0;
