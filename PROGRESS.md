@@ -735,11 +735,68 @@ plausibly just work if the permutation were selected correctly.
 extras branch if wanted, exactly as the Quake II port kept `quake2-vr-1to1`
 and `quake2-vr-pc` separate.
 
+---
+
+# The PC branch (`vr-pc`) — built, awaiting headset test
+
+Two installs now, mirroring the Quake II port:
+
+| branch | install | what it is |
+|---|---|---|
+| `vr-1to1`, tag `quakequest-vr-1to1` | `E:\Games\Quake VR (1to1)` | their game on PC, nothing added |
+| `vr-pc` | `E:\Games\Quake VR (PC)` | the above plus a PC Options page |
+
+## What is on the page
+
+Every default is their value, so an untouched install behaves exactly as the
+1:1 build does and their settings stay reachable — the same rule the Quake II
+PC branch followed.
+
+- **Supersampling**, 0.5–2.0, default their **1.3**. On their side this is a
+  compile-time constant reachable only through the Android `commandline.txt`,
+  which on PC means not reachable at all. The page shows the resulting per-eye
+  pixel count, because the same multiplier means very different things on
+  different headsets and VD quality settings — here 1.3 gives 3993x4243.
+- **Anti-aliasing**, off/2x/4x/8x, default their **1**, meaning off. Also a
+  compile-time constant on their side. Interesting that they chose none, given
+  MSAA is nearly free on a tile-based mobile GPU; presumably the eye buffer was
+  already costing them everything.
+- **Particles: DarkPlaces / Quake**, default theirs. This is DarkPlaces' own
+  `cl_particles_quake`, and it is **the red blood switch**.
+- **Door Z-fighting: As Quest / Fixed**, default theirs. Restores
+  `r_polygonoffset_submodel_offset` to stock's 14; their build sets it to 0 and
+  their own comment says that is to work around Tegra's Z-buffer.
+
+Both buffer settings are fixed when the eye framebuffers are created, so the
+page says restart to apply. The value is read at session start, not before
+`Host_Init` where no cvar exists yet; only the eye framebuffers and the
+engine's idea of its own resolution change, so the window and the GL context
+the session is bound to are untouched.
+
+## Why the blood switch rather than a fix
+
+Blood is drawn with an inverse-modulate blend off an inverted texture, and
+Team Beef's standalone shows the same black as this port did — so it was never
+a porting defect to repair. `cl_particles_quake` is DarkPlaces' own supported
+option, described in its help text as making particles "look mostly like the
+ones in Quake": blood becomes classic palette-73 particles instead of the dark
+sprite. Using the engine's own switch beats patching their render path.
+
+It changes all particles to Quake style, not only blood. Whether that is
+wanted or whether blood alone should be singled out is a headset question.
+
+## Deliberately not added
+
+**Realtime lighting and anisotropic filtering** — their menus already expose
+both, through `Lighting: Full` on the Options page and the Video page. The
+1:1 build can already turn on `r_shadow_realtime_world`, which is
+DarkPlaces' signature feature and was never affordable on a Quest. Nothing to
+add.
+
 ## Next
 
-- The PC branch: red blood, and whatever else is wanted, kept separate
-  from the 1:1 build exactly as Quake II kept `quake2-vr-1to1` and
-  `quake2-vr-pc`.
+Headset test of the PC page — in particular whether Particles: Quake gives
+the red blood that started this.
 - Systematic comparison against the standalone, which is what the Quake II
   port found most of its remaining fidelity gaps with.
 - Tag once mods are settled.
