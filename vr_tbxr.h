@@ -180,6 +180,10 @@ extern int NUM_MULTI_SAMPLES;
 extern int REFRESH;
 extern float SS_MULTIPLIER;
 
+// PC additions, both defaulting to their values.
+extern cvar_t vr_supersampling;
+extern cvar_t vr_msaa;
+
 // Session and renderer lifecycle. Split differently from theirs because a PC
 // OpenXR session needs a live GL context, which only exists once the engine
 // has opened its window - so the instance and the eye resolution are

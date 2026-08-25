@@ -76,6 +76,7 @@ void M_Menu_Main_f (void);
 		void M_Menu_Reset_f (void);
 		void M_Menu_Video_f (void);
 		void M_Menu_Controller_f (void);
+		void M_Menu_PCOptions_f (void);
 	void M_Menu_Help_f (void);
 	void M_Menu_Credits_f (void);
 	void M_Menu_Quit_f (void);
@@ -100,6 +101,7 @@ static void M_Main_Draw (void);
 		static void M_Reset_Draw (void);
 		static void M_Video_Draw (void);
 		static void M_Menu_Controller_Draw (void);
+		static void M_Menu_PCOptions_Draw (void);
 	static void M_Help_Draw (void);
 	static void M_Credits_Draw (void);
 	static void M_Quit_Draw (void);
@@ -125,6 +127,7 @@ static void M_Main_Key (int key, int ascii);
 		static void M_Reset_Key (int key, int ascii);
 		static void M_Video_Key (int key, int ascii);
 		static void M_Menu_Controller_Key (int key, int ascii);
+		static void M_Menu_PCOptions_Key (int key, int ascii);
 	static void M_Help_Key (int key, int ascii);
 	static void M_Credits_Key (int key, int ascii);
 	static void M_Quit_Key (int key, int ascii);
@@ -1699,7 +1702,7 @@ static void M_DrawCheckbox (int x, int y, int on)
 }
 
 
-#define OPTIONS_ITEMS 24
+#define OPTIONS_ITEMS 25   // 24 is theirs; 25 adds PC Options
 
 static int options_cursor;
 
@@ -1891,6 +1894,7 @@ static void M_Options_Draw (void)
 	M_Options_PrintCommand( "      Lighting:   High", true);
 	M_Options_PrintCommand( "      Lighting:   Full", true);
 	M_Options_PrintCommand( "     ** Browse Mods **", true);
+	M_Options_PrintCommand( "      ** PC Options **", true);
 }
 
 int bufOption = 0;
@@ -1979,6 +1983,9 @@ static void M_Options_Key (int k, int ascii)
 			break;
 		case 24:
 			M_Menu_ModList_f ();
+			break;
+		case 25:
+			M_Menu_PCOptions_f ();
 			break;
 		default:
 			M_Menu_Options_AdjustSliders (1);
@@ -3190,6 +3197,140 @@ static void M_Menu_Controller_Draw (void)
 		M_Options_PrintCommand("those not used to it.", true);
 		M_Options_PrintCommand(" ", true);
 		M_Options_PrintCommand("* Use this mode at your own risk! *", true);
+	}
+}
+
+//=============================================================================
+/* PC OPTIONS MENU */
+
+/*
+	Not theirs. Everything here defaults to the value their build uses, so an
+	untouched install behaves exactly as the 1:1 port does and their settings
+	stay reachable.
+
+	Supersampling and anti-aliasing are compile-time constants on their side,
+	reachable only through the Android commandline.txt - which on PC means not
+	reachable at all. Both are fixed when the eye framebuffers are created,
+	hence the restart note. The page shows the resulting per-eye pixel count,
+	because the same multiplier means very different things on different
+	headsets and Virtual Desktop quality settings.
+
+	Particles switches DarkPlaces' own cl_particles_quake, which is what makes
+	blood the classic bright red rather than the dark inverse-modulate sprite
+	their build uses.
+
+	Door Z-fighting restores r_polygonoffset_submodel_offset to stock's 14.
+	Their build sets it to 0, and their own comment says that is to work around
+	Tegra's Z-buffer - a mobile concession that costs correctness on PC.
+*/
+
+#define PCOPTIONS_ITEMS 4
+
+static int pcoptions_cursor;
+
+extern cvar_t vr_supersampling;
+extern cvar_t vr_msaa;
+extern cvar_t cl_particles_quake;
+extern cvar_t r_polygonoffset_submodel_offset;
+
+void M_Menu_PCOptions_f (void)
+{
+	key_dest = key_menu;
+	m_state = m_pcoptions;
+	m_entersound = true;
+}
+
+static void M_Menu_PCOptions_Draw (void)
+{
+	int visible;
+	cachepic_t *p;
+	char vabuf[1024];
+
+	M_Background(320, bound(200, 32 + PCOPTIONS_ITEMS * 8, vid_conheight.integer));
+
+	M_DrawPic(16, 4, "gfx/qplaque");
+	p = Draw_CachePic ("gfx/p_option");
+	M_DrawPic((320-p->width)/2, 4, "gfx/p_option");
+
+	optnum = 0;
+	optcursor = pcoptions_cursor;
+	visible = (int)((menu_height - 32) / 8);
+	opty = 32 - bound(0, optcursor - (visible >> 1), max(0, PCOPTIONS_ITEMS - visible)) * 8;
+
+	M_Options_PrintSlider(  "         Supersampling", true, vr_supersampling.value, 0.5, 2.0);
+
+	if (vr_msaa.integer <= 1)
+		M_Options_PrintCommand("        Anti-aliasing:  Off", true);
+	else
+		M_Options_PrintCommand(va(vabuf, sizeof(vabuf), "        Anti-aliasing:  %ix", vr_msaa.integer), true);
+
+	if (cl_particles_quake.integer)
+		M_Options_PrintCommand("            Particles:  Quake", true);
+	else
+		M_Options_PrintCommand("            Particles:  DarkPlaces", true);
+
+	if (r_polygonoffset_submodel_offset.value != 0)
+		M_Options_PrintCommand("      Door Z-fighting:  Fixed", true);
+	else
+		M_Options_PrintCommand("      Door Z-fighting:  As Quest", true);
+
+	M_Options_PrintCommand(" ", true);
+
+	// vid.width and vid.height are the eye buffer in VR, which is the figure
+	// that actually means something.
+	M_Options_PrintCommand(va(vabuf, sizeof(vabuf), "  Eye buffer now %ix%i", vid.width, vid.height), true);
+	M_Options_PrintCommand(" ", true);
+	M_Options_PrintCommand("  Supersampling and anti-aliasing", true);
+	M_Options_PrintCommand("  need a restart to take effect.", true);
+}
+
+static void M_Menu_PCOptions_Key (int key, int ascii)
+{
+	switch (key)
+	{
+	case K_ESCAPE:
+		M_Menu_Options_f ();
+		break;
+
+	case K_DOWNARROW:
+		S_LocalSound ("sound/misc/menu1.wav");
+		if (++pcoptions_cursor >= PCOPTIONS_ITEMS)
+			pcoptions_cursor = 0;
+		break;
+
+	case K_UPARROW:
+		S_LocalSound ("sound/misc/menu1.wav");
+		if (--pcoptions_cursor < 0)
+			pcoptions_cursor = PCOPTIONS_ITEMS - 1;
+		break;
+
+	case 'a':
+	case K_LEFTARROW:
+		S_LocalSound ("sound/misc/menu3.wav");
+		if (pcoptions_cursor == 0)
+			Cvar_SetValueQuick(&vr_supersampling, bound(0.5f, vr_supersampling.value - 0.1f, 2.0f));
+		else if (pcoptions_cursor == 1)
+			Cvar_SetValueQuick(&vr_msaa, vr_msaa.integer <= 1 ? 8 : vr_msaa.integer / 2);
+		else if (pcoptions_cursor == 2)
+			Cvar_SetValueQuick(&cl_particles_quake, 1 - cl_particles_quake.integer);
+		else if (pcoptions_cursor == 3)
+			Cvar_SetValueQuick(&r_polygonoffset_submodel_offset, r_polygonoffset_submodel_offset.value != 0 ? 0 : 14);
+		break;
+
+	case 'd':
+	case K_RIGHTARROW:
+	case K_ENTER:
+	case K_MOUSE1:
+		S_LocalSound ("sound/misc/menu3.wav");
+		if (pcoptions_cursor == 0)
+			Cvar_SetValueQuick(&vr_supersampling, bound(0.5f, vr_supersampling.value + 0.1f, 2.0f));
+		else if (pcoptions_cursor == 1)
+			Cvar_SetValueQuick(&vr_msaa, vr_msaa.integer >= 8 ? 1 : max(2, vr_msaa.integer * 2));
+		else if (pcoptions_cursor == 2)
+			Cvar_SetValueQuick(&cl_particles_quake, 1 - cl_particles_quake.integer);
+		else if (pcoptions_cursor == 3)
+			Cvar_SetValueQuick(&r_polygonoffset_submodel_offset, r_polygonoffset_submodel_offset.value != 0 ? 0 : 14);
+		break;
 	}
 }
 
@@ -5220,6 +5361,7 @@ static void M_Init (void)
 	Cmd_AddCommand ("menu_reset", M_Menu_Reset_f, "open the reset to defaults menu");
 	Cmd_AddCommand ("menu_reset", M_Menu_Controller_f, "open the yaw/pitch control menu");
 	Cmd_AddCommand ("menu_mods", M_Menu_ModList_f, "open the mods browser menu");
+	Cmd_AddCommand ("menu_pcoptions", M_Menu_PCOptions_f, "open the PC options menu");
 	Cmd_AddCommand ("help", M_Menu_Help_f, "open the help menu");
 	Cmd_AddCommand ("menu_quit", M_Menu_Quit_f, "open the quit menu");
 	Cmd_AddCommand ("menu_transfusion_episode", M_Menu_Transfusion_Episode_f, "open the transfusion episode select menu");
@@ -5309,6 +5451,10 @@ void M_Draw (void)
 
 	case m_controller:
 		M_Menu_Controller_Draw ();
+		break;
+
+	case m_pcoptions:
+		M_Menu_PCOptions_Draw ();
 		break;
 
 	case m_help:
@@ -5457,6 +5603,10 @@ void M_KeyEvent (int key, int ascii, qboolean downevent)
 
 	case m_controller:
 		M_Menu_Controller_Key (key, ascii);
+		return;
+
+	case m_pcoptions:
+		M_Menu_PCOptions_Key (key, ascii);
 		return;
 
 	case m_help:

@@ -35,6 +35,7 @@ enum m_state_e {
 	m_options,
 	m_video,
 	m_controller,
+	m_pcoptions,   // PC port addition, not theirs
 	m_keys,
 	m_help,
 	m_credits,
