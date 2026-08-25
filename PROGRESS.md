@@ -381,7 +381,7 @@ light on the aim point. The owner's own config sets it to 0.
 
 ---
 
-# Milestone 3a (OpenXR bring-up) — built, awaiting headset test
+# Milestone 3a (OpenXR bring-up) — complete, confirmed in the headset
 
 The OpenXR half of `TBXR_Common.c` is ported to Win32 and desktop GL. Their
 maths, spaces, swapchain format, frame structure and layer composition are
@@ -440,6 +440,38 @@ vsync is forced off once a session is live. The engine still swaps the desktop
 window every frame at the end of `CL_EndUpdateScreen`, and with vsync on that
 blocks on the monitor and caps the headset to the monitor's rate. In Quake II
 this presented as a flat 30fps and looked like an engine bug.
+
+## Confirmed in the headset (2026-08-25)
+
+Owner's verdict: "everything looks perfect". Stereo, head tracking, world
+scale at their `vr_worldscale 26.2467`, the big screen for menus, HUD
+placement and smoothness all correct, and nothing missing at the edge of
+vision when turning - so HEAD's full-FOV work carries over to VDXR, which was
+the main reason for targeting HEAD.
+
+Measured on a Quest 3 over VDXR: the runtime recommends **3072x3264 per eye**,
+and their 1.3 supersampling gives a **3993x4243** eye buffer at **72Hz**.
+Fourteen seconds of the full frame loop inside E1M1 - the projection layer
+path, not just the menu quad - produced **zero OpenXR errors**.
+
+For reference on load: the Quake II port measured 3379x3590 per eye on the
+same headset and VD settings, which is that same recommendation times Quake
+II's 1.1 default. QuakeQuest's 1.3 is about 40% more pixels per eye, against
+72Hz rather than 90Hz.
+
+## Two failures worth remembering
+
+- **`libstdc++-6.dll` missing beside the binary.** The OpenXR loader is C++,
+  so nothing started at all - and the failure is a Windows dialog, not a line
+  in the log. Caused by copying runtime DLLs by hand; `tools/build-mingw.sh`
+  now maintains them.
+- **Quitting left the process alive and unkillable.** Not force-killed:
+  `Host_Shutdown` finished, then `taskkill` reported "no running instance"
+  while the process was still listed and still holding the executable open.
+  The OpenXR swapchain images are GL textures owned by the context
+  `VID_Shutdown` destroys, and the session still held them. `VID_Shutdown`
+  now tears the session down first. Their build never has to: Android tears
+  the whole process down around them.
 
 ## Verified without a headset
 
