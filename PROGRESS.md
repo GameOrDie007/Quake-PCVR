@@ -588,53 +588,44 @@ saves are **copied**, because the game rewrites them and the Quest-side
 originals must not change underneath him. Config, saves and screenshots land
 inside the folder, so backing it up backs up everything.
 
-## Open: gamedir switching is broken, and it is not ours
+## Fixed: mods and Dimension of the Past
 
-Selecting a mod fails. Both routes give the same result:
+Selecting any mod failed with `Nasty -game name rejected: dopa`, through both
+`-game` on the command line and the `gamedir` console command that the
+in-game mods browser uses. Their README advertises mod support, so this was a
+real gap against their build, not a nicety.
 
-```
-Quake Error: Nasty -game name rejected: dopa
-```
+**Cause: `FS_CheckGameDir` returns a pointer into its own stack frame.**
+`FS_SysCheckGameDir` hands back the 8KB buffer it was given, `FS_CheckGameDir`
+returns that, and the buffer is an automatic - so the pointer is dead the
+moment the function returns. Undefined behaviour that older compilers let
+pass. GCC 12 and newer diagnose it as `-Wreturn-local-addr` and, as
+documented, **substitute a null pointer for the return**. That null lands in
+the caller's `if(!p)` branch, whose only other meaning is "the name was
+nasty" - hence a rejection message that had nothing to do with the name.
 
-- `-game dopa` on the command line, and
-- the `gamedir dopa` console command, which is what the in-game mods browser
-  uses — so that is broken too.
+The fix is one word: the buffer is now `static`. Callers read the description
+immediately and this runs during init or from the menu, so a shared buffer is
+safe.
 
-**Reproduced on stock DarkPlaces built from the milestone 1 commit**, before a
-single line of Team Beef's code. So it is a pre-existing incompatibility
-between 2013 DarkPlaces and this toolchain or a modern Windows, not something
-this port introduced. That is the important part; the rest is what was
-established while chasing it.
+Worth noting how it hid. The instrumentation said `FS_CheckNastyPath` returned
+0 and its branch was not taken, yet the caller saw NULL - a function returning
+through a path its own source does not contain. That is exactly what an
+optimiser substituting null looks like from the outside, and it is why
+reading the source harder was never going to find it. **The compiler had been
+saying so all along**: the warning was in every build log since milestone 1,
+unread. Grepping the build for warnings would have found this in a minute
+instead of an hour.
 
-What is known:
+Team Beef's clang build does not make the substitution, which is why their
+port has working mods and ours did not.
 
-- `FS_CheckGameDir` returns NULL. Reading the function, the **only** `return
-  NULL` is the `FS_CheckNastyPath` guard.
-- Instrumenting that guard shows it returns **0** for `"dopa"` — 4 bytes,
-  `64 6f 70 61`, no dot, nothing nasty — and the "-> NULL (nasty)" branch is
-  demonstrably not taken.
-- The caller nonetheless sees `p = 0x0000000000000000`, while
-  `fs_checkgamedir_missing` is a healthy pointer, so the sentinel is not
-  corrupted.
-- Identical at `-O0`, so not a codegen artefact of `-O3`.
-- Only one definition of `FS_CheckGameDir` links (`nm` over every object).
+This also silences `WARNING: base gamedir id1/ not found!`, which had been
+printed since milestone 1 even though `id1` was plainly there and its paks
+loaded a moment later. Same null, same cause.
 
-In short, the function returns NULL through a path the source does not
-contain. Not explained.
-
-One strong lead for whoever picks this up: with `fs_userdir` empty,
-`FS_ListGameDirs` calls `listdirectory(&list, "/", "")`, whose Win32
-implementation builds the pattern `"/*"` and enumerates **the root of the
-current drive**. The trace shows it walking `$recycle.bin`, `nvidia
-corporation`, `system volume information` and so on, calling `FS_CheckGameDir`
-on each. Relatedly, `WARNING: base gamedir ./id1/ not found!` is printed even
-though `id1` is right there and its paks load a moment later — so
-`listdirectory` is also failing on paths that plainly exist. Start there.
-
-Scope: **`id1` — the actual game — is unaffected**, which is why this went
-unnoticed until packaging. What is lost is Dimension of the Past and any other
-mod. The packaged folder ships `dopa/` ready to go, but no launcher for it,
-rather than shipping something that does not work.
+Verified: `-game dopa` loads `dopa/pak0.pak` and `map start` renders;
+`gamedir dopa`, the mods-browser path, loads it too.
 
 ## Black blood is theirs, and therefore correct
 
@@ -681,8 +672,9 @@ and `quake2-vr-pc` separate.
 
 ## Next
 
-- Root-cause `listdirectory` / `FS_CheckGameDir` so mods and dopa work.
-- Optionally, red blood as a PC extra - see above. Not a port fix.
+- The PC branch: red blood, and whatever else is wanted, kept separate
+  from the 1:1 build exactly as Quake II kept `quake2-vr-1to1` and
+  `quake2-vr-pc`.
 - Systematic comparison against the standalone, which is what the Quake II
   port found most of its remaining fidelity gaps with.
 - Tag once mods are settled.

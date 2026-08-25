@@ -1602,7 +1602,21 @@ FS_CheckGameDir
 const char *FS_CheckGameDir(const char *gamedir)
 {
 	const char *ret;
-	char buf[8192];
+	/*
+		Static, not automatic. FS_SysCheckGameDir hands this buffer back and
+		FS_CheckGameDir returns it, so as an automatic it is the address of a
+		dead stack frame the moment the function returns - undefined behaviour
+		that older compilers let pass. GCC 12 and newer diagnose it as
+		-Wreturn-local-addr and, as documented, substitute a null pointer for
+		the return. That null then lands in the caller's "if(!p)" branch, and
+		every attempt to select a mod fails with "Nasty -game name rejected",
+		including -game on the command line and the gamedir command that the
+		in-game mods browser uses. Team Beef's clang build does not make the
+		substitution, which is why their port has working mods and ours did
+		not. Callers read the description immediately, and this runs during
+		init or from the menu, so a shared buffer is safe.
+	*/
+	static char buf[8192];
 	char vabuf[1024];
 
 	if (FS_CheckNastyPath(gamedir, true))
