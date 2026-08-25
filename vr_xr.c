@@ -114,12 +114,22 @@ void VR_FlushEarlyLog(void)
 	}
 }
 
+/*
+	Theirs uses clock_gettime(CLOCK_MONOTONIC). The engine already has a
+	monotonic clock of its own, and using it keeps the haptics timing on the
+	same clock as everything else.
+*/
+double TBXR_GetTimeInMilliSeconds(void)
+{
+	return Sys_DirtyTime() * 1000.0;
+}
+
 XrInstance TBXR_GetXrInstance(void)
 {
 	return gAppState.Instance;
 }
 
-static void TBXR_CheckErrors(XrResult result, const char *function)
+void TBXR_CheckErrors(XrResult result, const char *function)
 {
 	if (XR_FAILED(result))
 	{
@@ -137,7 +147,6 @@ static void TBXR_CheckErrors(XrResult result, const char *function)
 	}
 }
 
-#define OXR(func) TBXR_CheckErrors(func, #func)
 
 /* ------------------------------------------------------------------------ */
 /* Maths - theirs, verbatim                                                  */

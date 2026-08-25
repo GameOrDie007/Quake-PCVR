@@ -82,7 +82,12 @@ qboolean VR_Enabled(void)
 ================================================================================
 */
 
-static int bigScreen = 0;
+/*
+	Theirs, including the initialiser: the game starts with the big screen up,
+	because that is what the menu and the startup credits are drawn on. Their
+	input handler reads and writes it too, hence not static.
+*/
+int bigScreen = 1;
 
 void BigScreenMode(int mode)
 {
@@ -308,6 +313,62 @@ static struct {
 	float pitch, previous_pitch, yaw, previous_yaw, roll;
 } move_event;
 
+/*
+	The rest of their vid_android.c glue, verbatim. QC_MotionEvent is where
+	the right stick becomes either smooth turning - fed through the engine's
+	own mouse accumulator - or a snap-turn step. Their `andrw` is the eye
+	buffer width, which on PC is vid.width for exactly the same reason.
+*/
+void QC_KeyEvent(int state, int key, int character)
+{
+	Key_Event(key, character, state);
+}
+
+void QC_Analog(int enable, float x, float y)
+{
+	analogenabled = enable;
+	analogx = x;
+	analogy = y;
+}
+
+void QC_MotionEvent(float delta, float dx, float dy)
+{
+	static bool canAdjust = true;
+
+	(void)dy;
+
+	//If not in vr mode, then always use yaw stick control
+	if (vr_yawmode.integer == 2)
+	{
+		in_mouse_x += (dx * delta);
+		in_windowmouse_x += (dx * delta);
+		if (in_windowmouse_x < 0) in_windowmouse_x = 0;
+		if (in_windowmouse_x > vid.width - 1) in_windowmouse_x = vid.width - 1;
+	}
+	else if (vr_yawmode.integer == 1)
+	{
+		if (fabs(dx) > 0.4 && canAdjust && delta != -1.0f)
+		{
+			if (dx > 0.0)
+				cl.comfortInc--;
+			else
+				cl.comfortInc++;
+
+			int max = (360.f / cl_comfort.value);
+
+			if (cl.comfortInc >= max)
+				cl.comfortInc = 0;
+			if (cl.comfortInc < 0)
+				cl.comfortInc = max - 1;
+
+			canAdjust = false;
+		}
+
+		if (fabs(dx) < 0.3)
+			canAdjust = true;
+	}
+}
+
 void QC_MoveEvent(float yaw, float pitch, float roll)
 {
 	move_event.previous_yaw = move_event.yaw;
@@ -352,25 +413,11 @@ void VR_IN_Move(void)
 */
 
 /*
-	Set true once the controller code lands. Until then the weapon pose is
-	synthesised even in VR, so the headset build is still worth testing: the
-	head tracks, the world is in stereo, and the gun sits where a viewmodel
-	would rather than inside the player's eye.
+	True once the OpenXR action set is attached and the controllers are being
+	read. Flatscreen leaves it false and synthesises the weapon pose instead,
+	since there is no controller to take it from.
 */
 qboolean vr_controller_input = false;
-
-void VR_HandleControllerInput(void)
-{
-}
-
-void TBXR_ProcessHaptics(void)
-{
-}
-
-void TBXR_Vibrate(int duration, int chan, float intensity)
-{
-	(void)duration; (void)chan; (void)intensity;
-}
 
 /*
 ================================================================================
@@ -471,7 +518,10 @@ qboolean VR_Startup(void)
 
 	TBXR_InitRenderer();
 
+	TBXR_InitActions();
+
 	vr_active = true;
+	vr_controller_input = true;
 
 	/*
 		The engine still swaps the desktop window once per frame, at the end
@@ -487,6 +537,10 @@ qboolean VR_Startup(void)
 	Con_Printf("VR: waiting for the session to become active\n");
 	TBXR_WaitForSessionActive();
 	Con_Printf("VR: session active at %dHz\n", TBXR_GetRefresh());
+
+	// Theirs, from the end of AppThreadFunction: the game opens on the
+	// credits rather than the attract demo.
+	MR_ToggleMenu(2);
 
 	return true;
 }
