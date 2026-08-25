@@ -197,6 +197,18 @@ void TBXR_prepareEyeBuffer(int eye);
 void TBXR_finishEyeBuffer(int eye);
 void TBXR_submitFrame(void);
 
+// Their TBXR_Common.h wraps every call in this, so vr_input.c expects it.
+void TBXR_CheckErrors(XrResult result, const char *function);
+#define OXR(func) TBXR_CheckErrors(func, #func)
+
+double TBXR_GetTimeInMilliSeconds(void);
+
+// From vr_input.c - theirs, unchanged.
+void TBXR_InitActions(void);
+void TBXR_SyncActions(void);
+void TBXR_UpdateControllers(void);
+void TBXR_ProcessHaptics(void);
+
 void TBXR_Recenter(void);
 int TBXR_GetRefresh(void);
 XrInstance TBXR_GetXrInstance(void);

@@ -162,6 +162,8 @@ OBJ_COMMON= \
 	r_lasersight.o \
 	r_lightning.o \
 	r_weaponwheel.o \
+	vr_game.o \
+	vr_input.o \
 	vr_pc.o \
 	vr_xr.o \
 	r_modules.o \
