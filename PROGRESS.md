@@ -508,7 +508,45 @@ containing backslashes — the escapes arrive mangled, and a `\n` inside a C
 string literal silently becomes a real newline. Write the script to a file and
 run it, or use the editing tool.
 
+---
+
+# Milestone 3b (controller input) — built, awaiting headset test
+
+## What came across
+
+| ours | theirs | how much changed |
+|---|---|---|
+| `vr_input.c` | `OpenXrInput.c` | the include line, the two logging macros, and four `strcpy` calls bounded because DarkPlaces bans `strcpy`. Nothing else. Their file has no JNI, EGL or Android reference in it at all |
+| `vr_game.c` | the input half of `QuakeQuest_OpenXR.c` | verbatim. Haptics, the text-entry keyboard tables, and `HandleInput_Default` - where every button, stick and pose becomes a Quake command |
+| `vr_pc.c` additions | the rest of `vid_android.c`'s glue | `QC_KeyEvent`, `QC_Analog`, `QC_MotionEvent`. Their `andrw` is the eye buffer width, which is `vid.width` here for the same reason |
+
+Their file mixes game behaviour with the JNI lifecycle and the app thread's
+loop; the latter two have no PC counterpart and were replaced in 3a. The
+pieces that are game behaviour but were needed earlier — the big screen, the
+projection helpers, the HMD setters — stay in `vr_pc.c`, because the engine
+had to be able to call them before any of this existed.
+
+## Two corrections to 3a, found while doing this
+
+- **`bigScreen` initialises to 1, not 0.** Theirs starts with the big screen
+  up, because that is what the menu and the startup credits are drawn on.
+- **`MR_ToggleMenu(2)` at the end of startup**, which their app thread does so
+  the game opens on the credits rather than the attract demo.
+
+Their `VrCommon.h` also declares `isMultiplayer` and `between`, which
+QuakeQuest never defines or uses. Not carried across.
+
+## Verified
+
+All 28 of their actions create and attach, fourteen seconds of the full frame
+loop inside E1M1 with controllers being read produces **zero OpenXR errors**
+and a clean teardown, and `-novr` still loads and renders flatscreen.
+
+Whether the mappings *feel* right is a headset question.
+
 ## Next
 
-Headset test of 3a, then milestone 3b: `OpenXrInput.c` and the game half of
-`QuakeQuest_OpenXR.c`.
+Headset test of 3b. Then: the deferred items from 3a — graceful shutdown
+through their `QC_exit` path rather than relying on `VID_Shutdown` — and a
+systematic comparison against the standalone, which is what the Quake II port
+found most of its remaining fidelity gaps with.
