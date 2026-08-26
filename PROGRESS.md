@@ -29,6 +29,39 @@ of the Past all work. 3993x4243 per eye at 72Hz.
 
 ## The package
 
+`tools/package-release.sh <dir>` builds a self-contained install: binary,
+run-time DLLs, their shipped config and weapon wheel, the owner's paks, the
+soundtrack, Dimension of the Past, his Quest saves, three launchers and a
+README.
+
+**Portability was incidental and is now guaranteed.** Saves and config stayed
+in the install folder only because nothing else claimed them. `FS_Init` picks
+a user directory by scanning from the *highest* mode downwards and taking the
+first writable one, skipping basedir entirely; basedir wins only when every
+other candidate is missing:
+
+```c
+for (dirmode = USERDIRMODE_COUNT - 1; dirmode > 0; dirmode--)
+    if (userdirstatus[dirmode] == 1)
+        break;
+```
+
+Proven rather than assumed: creating `Saved Games\darkplaces\id1` and running
+moved `config.cfg`, `darkplaces_history.txt`, `qconsole.log` and the save out
+of the install folder. Any other DarkPlaces build ever having run would have
+been enough, and it would have happened silently.
+
+The launchers now pass **`-nohome`**, which sets `fs_userdir` empty and skips
+the search outright. Verified with the hazard folder present: everything stays
+put. Note the writability test is an append-open of
+`<userdir>/id1/config.cfg`, so `Saved Games\darkplaces` alone does not trigger
+it — the `id1` subfolder is needed, which is why the first attempt to
+reproduce it failed.
+
+A shortcut made straight to `darkplaces-sdl.exe` would lose the protection, so
+the README says to point shortcuts at a `.bat`.
+
+
 `tools/package-release.sh` builds `E:\Games\Quake VR (1to1)`: binary,
 run-time DLLs, their shipped config and weapon wheel, the owner's paks, the
 soundtrack, Dimension of the Past and his Quest saves. Config, saves and
