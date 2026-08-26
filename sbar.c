@@ -123,13 +123,28 @@ extern qboolean vrMode;
 extern vec3_t hmdorientation;
 extern cvar_t vr_worldscale;
 
+/*
+	PC addition, not theirs. Their status bar sits at the bottom of the eye
+	buffer and only rises when you pitch your head down past 15 degrees, which
+	on a PC headset leaves it below comfortable view. This lifts it by a
+	constant percentage of screen height on top of that. At the default of 0
+	the arithmetic below is exactly theirs.
+*/
+cvar_t vr_hud_height = {CVAR_SAVE, "vr_hud_height", "0", "raises the VR status bar by this percent of the screen height (0 = as the Quest build)"};
+
 //Calculate the y-offset of the status bar dependent on where the user is looking
 int Sbar_GetYOffset()
 {
-	if (hmdorientation[PITCH] <= 15.0f || !vrMode)
+	int offset;
+
+	if (!vrMode)
 		return 0;
 
-	int offset = (vid_conheight.value * ((hmdorientation[PITCH] - 15.0f) / 90.0f));
+	offset = (int)(vid_conheight.value * (bound(0.0f, vr_hud_height.value, 50.0f) / 100.0f));
+
+	if (hmdorientation[PITCH] > 15.0f)
+		offset += (int)(vid_conheight.value * ((hmdorientation[PITCH] - 15.0f) / 90.0f));
+
 	if (offset < 0) offset = 0;
 	return offset;
 }
@@ -388,6 +403,7 @@ void Sbar_Init (void)
 {
 	Cmd_AddCommand("+showscores", Sbar_ShowScores, "show scoreboard");
 	Cmd_AddCommand("-showscores", Sbar_DontShowScores, "hide scoreboard");
+	Cvar_RegisterVariable(&vr_hud_height);
 	Cvar_RegisterVariable(&showfps);
 	Cvar_RegisterVariable(&showsound);
 	Cvar_RegisterVariable(&showblur);

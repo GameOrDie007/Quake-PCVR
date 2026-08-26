@@ -2961,6 +2961,12 @@ void Host_InitCommands (void)
 
 	Cmd_AddCommand_WithClientCommand ("status", Host_Status_f, Host_Status_f, "print server status information");
 	Cmd_AddCommand ("quit", Host_Quit_f, "quit the game");
+	// PC addition, defined in sys_sdl.c. Declared here so this file need
+	// not pull in the Win32 headers.
+	{
+		extern void Host_RelaunchGame_f (void);
+		Cmd_AddCommand ("relaunchgame", Host_RelaunchGame_f, "restarts the engine with a different game selected (example: relaunchgame -hipnotic)");
+	}
 	Cmd_AddCommand_WithClientCommand ("god", NULL, Host_God_f, "god mode (invulnerability)");
 	Cmd_AddCommand_WithClientCommand ("notarget", NULL, Host_Notarget_f, "notarget mode (monsters do not see you)");
 	Cmd_AddCommand_WithClientCommand ("fly", NULL, Host_Fly_f, "fly mode (flight)");

@@ -167,7 +167,7 @@ HOW TO PLAY
     Scourge of Armagon             (mission pack 1)
     Dissolution of Eternity        (mission pack 2)
     Dimension of the Machine       (mg1, the 2021 MachineGames episode)
-    Dawn of the Machine            (mg3, the newer MachineGames episode)
+    Dawn of the Machine            (mg3, the 2026 MachineGames episode)
 
   Only the ones whose data was found when this folder was built are present.
   All five were tested against this engine and all five load and render.
