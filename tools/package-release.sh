@@ -104,6 +104,53 @@ cd /d "%~dp0"
 start "" "%~dp0darkplaces-sdl.exe" -basedir . -nohome -game dopa %*
 EOF
 
+# Official expansions, if a Quake install can be found.
+#
+# All four were tested against this engine and all four load and render:
+# Scourge of Armagon and Dissolution of Eternity are classic BSP29, while
+# Dimension of the Machine (mg1) and the newer MachineGames episode (mg3) are
+# mostly BSP2 - a format upstream DarkPlaces added in February 2013, five
+# months before the commit Team Beef forked, so this engine reads it.
+#
+# hipnotic and rogue come from the classic folders because -hipnotic and
+# -rogue are what DarkPlaces was written against, and they are far smaller.
+# mg1 and mg3 exist only in rerelease/. Both were verified to work against the
+# classic id1 paks, so there is no need for the rerelease base data.
+#
+# Set QQ_QUAKEDIR to override, or QQ_NOEXPANSIONS=1 to skip (saves ~1GB).
+QUAKEDIR=${QQ_QUAKEDIR:-"C:/Program Files (x86)/Steam/steamapps/common/Quake"}
+
+add_expansion() {
+	src="$1"; dir="$2"; label="$3"; args="$4"
+
+	if [ ! -f "$src" ]; then return; fi
+
+	mkdir -p "$DEST/$dir"
+	if [ ! -f "$DEST/$dir/pak0.pak" ]; then
+		echo "  $label..."
+		cp "$src" "$DEST/$dir/pak0.pak"
+	fi
+
+	cat > "$DEST/$label.bat" <<EOF
+@echo off
+rem Start Virtual Desktop on the headset and connect it FIRST.
+cd /d "%~dp0"
+start "" "%~dp0darkplaces-sdl.exe" -basedir . -nohome $args %*
+EOF
+}
+
+if [ -z "$QQ_NOEXPANSIONS" ] && [ -d "$QUAKEDIR" ]; then
+	echo "Expansions..."
+	add_expansion "$QUAKEDIR/hipnotic/pak0.pak" hipnotic \
+		"Scourge of Armagon" "-hipnotic"
+	add_expansion "$QUAKEDIR/rogue/pak0.pak" rogue \
+		"Dissolution of Eternity" "-rogue"
+	add_expansion "$QUAKEDIR/rerelease/mg1/pak0.pak" mg1 \
+		"Dimension of the Machine" "-game mg1"
+	add_expansion "$QUAKEDIR/rerelease/mg3/pak0.pak" mg3 \
+		"Dimension of the Machine II" "-game mg3"
+fi
+
 # A short note on what this folder is, next to the launchers.
 cat > "$DEST/README.txt" <<'EOF'
 Quake VR - PCVR port of Team Beef's QuakeQuest
@@ -114,7 +161,16 @@ HOW TO PLAY
   that VDXR is the running OpenXR runtime. Then run "Quake VR.bat".
 
   "Quake VR (flatscreen).bat" runs it on the monitor with no headset.
-  "Dimension of the Past.bat" runs the DoPa episode.
+
+  The other .bat files run the expansions:
+    Dimension of the Past          (dopa)
+    Scourge of Armagon             (mission pack 1)
+    Dissolution of Eternity        (mission pack 2)
+    Dimension of the Machine       (mg1, the 2021 MachineGames episode)
+    Dimension of the Machine II    (mg3, the newer MachineGames episode)
+
+  Only the ones whose data was found when this folder was built are present.
+  All five were tested against this engine and all five load and render.
 
 THIS FOLDER IS FULLY PORTABLE
   Everything the game writes stays inside it: config.cfg, saved games,
