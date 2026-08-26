@@ -77,7 +77,7 @@ void M_Menu_Main_f (void);
 		void M_Menu_Video_f (void);
 		void M_Menu_Controller_f (void);
 		void M_Menu_PCOptions_f (void);
-		void M_Menu_Expansions_f (void);
+		void M_Menu_GameSelect_f (void);
 	void M_Menu_Help_f (void);
 	void M_Menu_Credits_f (void);
 	void M_Menu_Quit_f (void);
@@ -103,7 +103,8 @@ static void M_Main_Draw (void);
 		static void M_Video_Draw (void);
 		static void M_Menu_Controller_Draw (void);
 		static void M_Menu_PCOptions_Draw (void);
-		static void M_Menu_Expansions_Draw (void);
+		static void M_Menu_GameSelect_Draw (void);
+		static int GameSelect_Choices (void);
 	static void M_Help_Draw (void);
 	static void M_Credits_Draw (void);
 	static void M_Quit_Draw (void);
@@ -130,7 +131,7 @@ static void M_Main_Key (int key, int ascii);
 		static void M_Video_Key (int key, int ascii);
 		static void M_Menu_Controller_Key (int key, int ascii);
 		static void M_Menu_PCOptions_Key (int key, int ascii);
-		static void M_Menu_Expansions_Key (int key, int ascii);
+		static void M_Menu_GameSelect_Key (int key, int ascii);
 	static void M_Help_Key (int key, int ascii);
 	static void M_Credits_Key (int key, int ascii);
 	static void M_Quit_Key (int key, int ascii);
@@ -677,7 +678,7 @@ static void M_Main_Key (int key, int ascii)
 				switch (m_main_cursor)
 				{
 				case 0:
-					M_Menu_SinglePlayer_f ();
+					M_Menu_GameSelect_f ();
 					break;
 
 				case 1:
@@ -708,7 +709,7 @@ static void M_Main_Key (int key, int ascii)
 				switch (m_main_cursor)
 				{
 				case 0:
-					M_Menu_SinglePlayer_f ();
+					M_Menu_GameSelect_f ();
 					break;
 
 				case 1:
@@ -833,7 +834,7 @@ static void M_Main_Key (int key, int ascii)
 			switch (m_main_cursor)
 			{
 			case 0:
-				M_Menu_SinglePlayer_f ();
+				M_Menu_GameSelect_f ();
 				break;
 
 			case 1:
@@ -861,7 +862,7 @@ static void M_Main_Key (int key, int ascii)
 /* SINGLE PLAYER MENU */
 
 static int	m_singleplayer_cursor;
-#define	SINGLEPLAYER_ITEMS	4
+#define	SINGLEPLAYER_ITEMS	3
 
 
 void M_Menu_SinglePlayer_f (void)
@@ -901,10 +902,6 @@ static void M_SinglePlayer_Draw (void)
 		M_DrawPic ( (320-p->width)/2, 4, "gfx/ttl_sgl");
 		M_DrawPic (72, 32, "gfx/sp_menu");
 
-		// PC addition: a fourth entry below their three. gfx/sp_menu only
-		// has art for New Game, Load and Save, so this one is text.
-		M_Print (72, 32 + 3 * 20 + 4, "EXPANSIONS");
-
 		f = (int)(realtime * 10)%6;
 
 		M_DrawPic (54, 32 + m_singleplayer_cursor * 20, va(vabuf, sizeof(vabuf), "gfx/menudot%i", f+1));
@@ -924,7 +921,11 @@ static void M_SinglePlayer_Key (int key, int ascii)
 	switch (key)
 	{
 	case K_ESCAPE:
-		M_Menu_Main_f ();
+		// Back to the game list, unless this install has no list to show.
+		if (GameSelect_Choices () > 1)
+			M_Menu_GameSelect_f ();
+		else
+			M_Menu_Main_f ();
 		break;
 
 	case K_DOWNARROW:
@@ -966,10 +967,6 @@ static void M_SinglePlayer_Key (int key, int ascii)
 
 		case 2:
 			M_Menu_Save_f ();
-			break;
-
-		case 3:
-			M_Menu_Expansions_f ();
 			break;
 		}
 	}
@@ -3212,31 +3209,36 @@ static void M_Menu_Controller_Draw (void)
 }
 
 //=============================================================================
-/* EXPANSIONS MENU */
+/* GAME SELECT MENU */
 
 /*
-	Not theirs. Their build reaches the expansions the way the Android
-	launcher does, one game per shortcut, which on PC is the .bat files beside
-	the exe. This is the same idea from inside the game.
+	Not theirs. Their build reaches the expansions the way the Android launcher
+	does, one game per shortcut, which on PC is the .bat files beside the exe.
+	This puts the same choice in front of Single Player, the way the 2021
+	re-release does it: pick the game, then New Game or Load or Save within it.
 
-	It relaunches rather than changing gamedir in place. DarkPlaces' own
-	gamedir change ends in vid_restart, which destroys the GL context - and
-	the OpenXR swapchain images are textures owned by that context, so the
-	session goes with it and the headset is left behind. Relaunching also gets
-	the mission packs right: -hipnotic and -rogue select a game mode, which
-	changes the status bar and the episode names, and that is read once at
-	startup.
+	Load and Save need no special handling as a result. Saves live in the
+	game's own directory, and by the time that page is reached the engine is
+	running that game, so they are simply the right ones.
+
+	Choosing a game that is not the one running relaunches the engine. A
+	gamedir change in the engine ends in vid_restart, which destroys the GL
+	context - and the OpenXR swapchain images are textures owned by that
+	context, so the session goes with it and the headset is left behind.
+	Relaunching is also the only way to select a mission pack's game mode:
+	-hipnotic and -rogue change the status bar and the episode names, and that
+	is read once at startup.
 */
 
-typedef struct expansion_s
+typedef struct gameentry_s
 {
 	const char *dir;    // gamedir to look for; empty means stock Quake
 	const char *name;
 	const char *args;   // what goes on the relaunched command line
 }
-expansion_t;
+gameentry_t;
 
-static const expansion_t expansionlist[] =
+static const gameentry_t gameselect_games[] =
 {
 	{ "",         "Quake",                    ""           },
 	{ "hipnotic", "Scourge of Armagon",       "-hipnotic"  },
@@ -3246,63 +3248,92 @@ static const expansion_t expansionlist[] =
 	{ "mg3",      "Dawn of the Machine",      "-game mg3"  },
 };
 
-#define EXPANSION_TOTAL ((int)(sizeof(expansionlist) / sizeof(expansionlist[0])))
+#define GAMESELECT_TOTAL ((int)(sizeof(gameselect_games) / sizeof(gameselect_games[0])))
 
-static int expansion_cursor;
-static int expansion_present[EXPANSION_TOTAL];  // indices into expansionlist
-static int expansion_count;
-static int expansion_current;                   // index into expansion_present, -1 if none
+static int gameselect_cursor;
+static int gameselect_present[GAMESELECT_TOTAL];  // indices into gameselect_games
+static int gameselect_count;
+static int gameselect_current;                  // index into gameselect_present, -1 if none
 
 // The mission packs are a game mode rather than a gamedir, so they are
 // recognised differently from the episodes.
-static qboolean Expansions_IsCurrent(int i)
+static qboolean GameSelect_IsCurrent(int i)
 {
-	if (!strcmp(expansionlist[i].dir, "hipnotic"))
+	if (!strcmp(gameselect_games[i].dir, "hipnotic"))
 		return gamemode == GAME_HIPNOTIC;
-	if (!strcmp(expansionlist[i].dir, "rogue"))
+	if (!strcmp(gameselect_games[i].dir, "rogue"))
 		return gamemode == GAME_ROGUE;
-	if (expansionlist[i].dir[0])
-		return fs_numgamedirs > 0 && !strcasecmp(fs_gamedirs[0], expansionlist[i].dir);
+	if (gameselect_games[i].dir[0])
+		return fs_numgamedirs > 0 && !strcasecmp(fs_gamedirs[0], gameselect_games[i].dir);
 
 	return gamemode == GAME_NORMAL && fs_numgamedirs == 0;
 }
 
-static void Expansions_Rebuild(void)
+static void GameSelect_Rebuild(void)
 {
 	int i;
 	char vabuf[MAX_OSPATH];
 
-	expansion_count = 0;
-	expansion_current = -1;
+	gameselect_count = 0;
+	gameselect_current = -1;
 
-	for (i = 0; i < EXPANSION_TOTAL; i++)
+	for (i = 0; i < GAMESELECT_TOTAL; i++)
 	{
 		// Stock Quake is always listed; the rest are listed if their data is
 		// in the install, which is what the packaging script decides.
-		if (expansionlist[i].dir[0] && !FS_SysFileExists(va(vabuf, sizeof(vabuf), "%s%s/pak0.pak", fs_basedir, expansionlist[i].dir)))
+		if (gameselect_games[i].dir[0] && !FS_SysFileExists(va(vabuf, sizeof(vabuf), "%s%s/pak0.pak", fs_basedir, gameselect_games[i].dir)))
 			continue;
 
-		if (Expansions_IsCurrent(i))
-			expansion_current = expansion_count;
+		if (GameSelect_IsCurrent(i))
+			gameselect_current = gameselect_count;
 
-		expansion_present[expansion_count++] = i;
+		gameselect_present[gameselect_count++] = i;
 	}
 
-	if (expansion_cursor >= expansion_count)
-		expansion_cursor = 0;
-	if (expansion_current >= 0)
-		expansion_cursor = expansion_current;
+	if (gameselect_cursor >= gameselect_count)
+		gameselect_cursor = 0;
+	if (gameselect_current >= 0)
+		gameselect_cursor = gameselect_current;
 }
 
-void M_Menu_Expansions_f (void)
+// How many games this install actually offers. The Single Player page asks,
+// so that Escape goes back to a list only when there is a list to go back to.
+static int GameSelect_Choices(void)
 {
-	key_dest = key_menu;
-	m_state = m_expansions;
-	m_entersound = true;
-	Expansions_Rebuild();
+	GameSelect_Rebuild();
+	return gameselect_count;
 }
 
-static void M_Menu_Expansions_Draw (void)
+/*
+	Their M_Print_Big, a shade narrower. At its own 12 the longest name here,
+	"Dimension of the Machine", is 288 units wide and runs off a 320 unit menu
+	once it clears the plaque. Same font, same height, so it still reads as
+	part of their menus.
+*/
+static void GameSelect_Print(float cx, float cy, const char *str, qboolean highlight)
+{
+	DrawQ_String(menu_x + cx, menu_y + cy, str, 0, 10, 12,
+				 1, highlight ? 0 : 1, highlight ? 0 : 1, 1, 0, NULL, true, FONT_MENU);
+}
+
+void M_Menu_GameSelect_f (void)
+{
+	GameSelect_Rebuild();
+
+	// A plain Quake install has nothing to choose between, so do not make the
+	// player walk through a one line list to reach New Game.
+	if (gameselect_count < 2)
+	{
+		M_Menu_SinglePlayer_f ();
+		return;
+	}
+
+	key_dest = key_menu;
+	m_state = m_gameselect;
+	m_entersound = true;
+}
+
+static void M_Menu_GameSelect_Draw (void)
 {
 	int i;
 	cachepic_t *p;
@@ -3313,70 +3344,56 @@ static void M_Menu_Expansions_Draw (void)
 	p = Draw_CachePic ("gfx/ttl_sgl");
 	M_DrawPic ((320 - p->width) / 2, 4, "gfx/ttl_sgl");
 
-	for (i = 0; i < expansion_count; i++)
+	for (i = 0; i < gameselect_count; i++)
 	{
-		const char *name = expansionlist[expansion_present[i]].name;
-		float y = 40 + i * 12;
+		float y = 44 + i * 20;
 
 		// The pulsing bar the options pages use. A blinking cursor character
 		// sits too close to the plaque to be seen, and a bar reads better at
 		// the edge of vision anyway.
-		if (i == expansion_cursor)
-			DrawQ_Fill(menu_x + 64, menu_y + y - 2, 208, 12, 0.5 + 0.2 * sin(realtime * M_PI), 0, 0, 0.5, 0);
+		if (i == gameselect_cursor)
+			DrawQ_Fill(menu_x + 64, menu_y + y - 4, 248, 20, 0.5 + 0.2 * sin(realtime * M_PI), 0, 0, 0.5, 0);
 
 		// The one already running is drawn in the highlight colour.
-		if (i == expansion_current)
-			M_PrintRed (72, y, name);
-		else
-			M_Print (72, y, name);
+		GameSelect_Print (72, y, gameselect_games[gameselect_present[i]].name, i == gameselect_current);
 	}
 
-	// Clear of the plaque down the left, which reaches x = 70.
-	M_Print (72, 40 + expansion_count * 12 + 20, "Choosing another one restarts");
-	M_Print (72, 40 + expansion_count * 12 + 32, "the game. Keep Virtual Desktop");
-	M_Print (72, 40 + expansion_count * 12 + 44, "connected while it does.");
+	// Only worth saying while it applies.
+	if (gameselect_cursor != gameselect_current)
+		M_Print (72, 44 + gameselect_count * 20 + 10, "This one restarts the game.");
 }
 
-static void M_Menu_Expansions_Key (int key, int ascii)
+static void M_Menu_GameSelect_Key (int key, int ascii)
 {
 	char vabuf[1024];
 
 	switch (key)
 	{
 	case K_ESCAPE:
-		M_Menu_SinglePlayer_f ();
+		M_Menu_Main_f ();
 		break;
 
 	case K_DOWNARROW:
 		S_LocalSound ("sound/misc/menu1.wav");
-		if (++expansion_cursor >= expansion_count)
-			expansion_cursor = 0;
+		if (++gameselect_cursor >= gameselect_count)
+			gameselect_cursor = 0;
 		break;
 
 	case K_UPARROW:
 		S_LocalSound ("sound/misc/menu1.wav");
-		if (--expansion_cursor < 0)
-			expansion_cursor = expansion_count - 1;
+		if (--gameselect_cursor < 0)
+			gameselect_cursor = gameselect_count - 1;
 		break;
 
 	case K_MOUSE1:
 	case K_ENTER:
 		m_entersound = true;
 
-		if (expansion_cursor == expansion_current)
-		{
-			// Already running this one, so there is nothing to restart for -
-			// start a new game exactly as New Game does.
-			key_dest = key_game;
-			if (sv.active)
-				Cbuf_AddText ("disconnect\n");
-			Cbuf_AddText ("maxplayers 1\n");
-			Cbuf_AddText ("deathmatch 0\n");
-			Cbuf_AddText ("coop 0\n");
-			Cbuf_AddText ("startmap_sp\n");
-		}
+		// Already in it, so go straight on to New Game / Load / Save.
+		if (gameselect_cursor == gameselect_current)
+			M_Menu_SinglePlayer_f ();
 		else
-			Cbuf_AddText (va(vabuf, sizeof(vabuf), "relaunchgame %s\n", expansionlist[expansion_present[expansion_cursor]].args));
+			Cbuf_AddText (va(vabuf, sizeof(vabuf), "relaunchgame %s\n", gameselect_games[gameselect_present[gameselect_cursor]].args));
 		break;
 	}
 }
@@ -5536,7 +5553,7 @@ static void M_Init (void)
 
 	Cmd_AddCommand ("menu_main", M_Menu_Main_f, "open the main menu");
 	Cmd_AddCommand ("menu_singleplayer", M_Menu_SinglePlayer_f, "open the singleplayer menu");
-	Cmd_AddCommand ("menu_expansions", M_Menu_Expansions_f, "open the expansions menu");
+	Cmd_AddCommand ("menu_gameselect", M_Menu_GameSelect_f, "open the game and expansion list");
 	Cmd_AddCommand ("menu_load", M_Menu_Load_f, "open the loadgame menu");
 	Cmd_AddCommand ("menu_save", M_Menu_Save_f, "open the savegame menu");
 	Cmd_AddCommand ("menu_multiplayer", M_Menu_MultiPlayer_f, "open the multiplayer menu");
@@ -5646,8 +5663,8 @@ void M_Draw (void)
 		M_Menu_PCOptions_Draw ();
 		break;
 
-	case m_expansions:
-		M_Menu_Expansions_Draw ();
+	case m_gameselect:
+		M_Menu_GameSelect_Draw ();
 		break;
 
 	case m_help:
@@ -5802,8 +5819,8 @@ void M_KeyEvent (int key, int ascii, qboolean downevent)
 		M_Menu_PCOptions_Key (key, ascii);
 		return;
 
-	case m_expansions:
-		M_Menu_Expansions_Key (key, ascii);
+	case m_gameselect:
+		M_Menu_GameSelect_Key (key, ascii);
 		return;
 
 	case m_help:
