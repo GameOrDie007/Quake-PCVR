@@ -81,26 +81,74 @@ for sav in "$DATA"/id1/*.sav; do
 	cp -n "$sav" "$DEST/id1/" 2>/dev/null || true
 done
 
-# Launchers. -basedir . keeps config, saves and screenshots in the folder.
+# Launchers. -basedir . keeps config, saves and screenshots in the folder,
+# and -nohome stops DarkPlaces preferring a user directory outside it.
 cat > "$DEST/Quake VR.bat" <<'EOF'
 @echo off
 rem Start Virtual Desktop on the headset and connect it FIRST, so VDXR is the
 rem running OpenXR runtime, then run this.
 cd /d "%~dp0"
-start "" "%~dp0darkplaces-sdl.exe" -basedir . %*
+start "" "%~dp0darkplaces-sdl.exe" -basedir . -nohome %*
 EOF
 
 cat > "$DEST/Quake VR (flatscreen).bat" <<'EOF'
 @echo off
 cd /d "%~dp0"
-start "" "%~dp0darkplaces-sdl.exe" -basedir . -novr -window %*
+start "" "%~dp0darkplaces-sdl.exe" -basedir . -nohome -novr -window %*
 EOF
 
 cat > "$DEST/Dimension of the Past.bat" <<'EOF'
 @echo off
 rem Start Virtual Desktop on the headset and connect it FIRST.
 cd /d "%~dp0"
-start "" "%~dp0darkplaces-sdl.exe" -basedir . -game dopa %*
+start "" "%~dp0darkplaces-sdl.exe" -basedir . -nohome -game dopa %*
+EOF
+
+# A short note on what this folder is, next to the launchers.
+cat > "$DEST/README.txt" <<'EOF'
+Quake VR - PCVR port of Team Beef's QuakeQuest
+==============================================
+
+HOW TO PLAY
+  Start Virtual Desktop on the headset and connect it to this PC FIRST, so
+  that VDXR is the running OpenXR runtime. Then run "Quake VR.bat".
+
+  "Quake VR (flatscreen).bat" runs it on the monitor with no headset.
+  "Dimension of the Past.bat" runs the DoPa episode.
+
+THIS FOLDER IS FULLY PORTABLE
+  Everything the game writes stays inside it: config.cfg, saved games,
+  screenshots and the console log all live under id1\ (or dopa\).
+  Copy the folder to another PC and your settings and saves come with it.
+  Back it up and you have backed up everything.
+
+  The launchers pass -nohome, and that is what guarantees it. Without it
+  DarkPlaces hunts for a "user directory" and will quietly prefer
+  "Saved Games\darkplaces" or "Documents\My Games\darkplaces" over this
+  folder if either happens to exist - so your saves would end up somewhere
+  else. If you make your own shortcut, point it at a .bat rather than at
+  darkplaces-sdl.exe, or that protection is lost.
+
+CONTROLS
+  These are Team Beef's, unchanged.
+    Left thumbstick .......... move
+    Right thumbstick L/R ..... turn (snap by default, 45 degrees)
+    Right thumbstick U/D ..... next / previous weapon
+    Right thumbstick click ... cycle laser sight mode
+    Dominant trigger ......... fire
+    Off-hand trigger ......... run
+    Dominant grip ............ weapon wheel
+    A ........................ jump
+    Y ........................ text entry keyboard
+    Left menu button ......... in-game menu
+
+  Options -> Controller Settings has handedness, turn mode, snap angle and
+  6DoF/3DoF weapon tracking.
+
+WORTH TRYING
+  Options -> Lighting: Full turns on DarkPlaces' realtime world lighting.
+  It was never affordable on a Quest and it is the biggest visual upgrade
+  available here.
 EOF
 
 echo
