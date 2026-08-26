@@ -230,7 +230,8 @@ void Host_RelaunchGame_f (void)
 				i++;
 			continue;
 		}
-		if (!strcasecmp(a, "-game") || !strcasecmp(a, "-relaunchwait"))
+		if (!strcasecmp(a, "-game") || !strcasecmp(a, "-relaunchwait") ||
+			!strcasecmp(a, "-spmenu"))
 		{
 			i++;  // and the value that follows it
 			continue;
@@ -263,6 +264,10 @@ void Host_RelaunchGame_f (void)
 	// exit before it asks. See -relaunchwait in main.
 	dpsnprintf(pidarg, sizeof(pidarg), " -relaunchwait %u", (unsigned)GetCurrentProcessId());
 	strlcat(cmdline, pidarg, sizeof(cmdline));
+
+	// Every relaunch comes from the game list, so the new instance opens on
+	// the page the player was heading for rather than the credits.
+	strlcat(cmdline, " -spmenu", sizeof(cmdline));
 
 	memset(&si, 0, sizeof(si));
 	si.cb = sizeof(si);
@@ -367,6 +372,11 @@ int main (int argc, char *argv[])
 	{
 		Con_Printf("VR: startup failed, continuing flatscreen\n");
 	}
+
+	// COMMANDLINEOPTION: vr: -spmenu opens Single Player once the game is up
+	// (see Host_RelaunchGame_f, which is the only thing that passes it)
+	if (COM_CheckParm("-spmenu"))
+		Cbuf_AddText("menu_singleplayer\n");
 
 	VR_MainLoop();
 
