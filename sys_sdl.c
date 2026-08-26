@@ -179,6 +179,143 @@ void Sys_InitConsole (void)
 {
 }
 
+/*
+	Restart the process with a different game selected.
+
+	Changing gamedir in the engine ends in vid_restart, which destroys the GL
+	context - and the OpenXR swapchain images are textures owned by that
+	context, so the session goes with it and the headset is left behind. Their
+	build never meets this: on Android every game is its own launcher intent
+	and the process always starts fresh. A mission pack also needs its game
+	mode, which is read once at startup, so a restart is the only way to get
+	-hipnotic and -rogue right anyway.
+
+	The current command line is reused, so -basedir, -nohome and anything else
+	the launcher passed survive; only the game selection is replaced.
+*/
+void Host_RelaunchGame_f (void)
+{
+#ifdef WIN32
+	char exe[MAX_OSPATH];
+	char cmdline[8192];
+	char pidarg[64];
+	int i;
+	STARTUPINFOA si;
+	PROCESS_INFORMATION pi;
+
+	if (!GetModuleFileNameA(NULL, exe, sizeof(exe)))
+	{
+		Con_Printf("relaunchgame: cannot find my own executable\n");
+		return;
+	}
+
+	strlcpy(cmdline, "\"", sizeof(cmdline));
+	strlcat(cmdline, exe, sizeof(cmdline));
+	strlcat(cmdline, "\"", sizeof(cmdline));
+
+	// Everything the launcher passed, minus whatever picked a game.
+	for (i = 1; i < com_argc; i++)
+	{
+		const char *a = com_argv[i];
+
+		if (!a || !a[0])
+			continue;
+		if (a[0] == '+')
+		{
+			// A + command belongs to the launch that was given it: re-running
+			// it against a different game would be wrong, and a +relaunchgame
+			// would hand the new instance the same instruction forever. Skip
+			// the command and its arguments, which run to the next switch.
+			while (i + 1 < com_argc && com_argv[i + 1][0] != '-' && com_argv[i + 1][0] != '+')
+				i++;
+			continue;
+		}
+		if (!strcasecmp(a, "-game") || !strcasecmp(a, "-relaunchwait"))
+		{
+			i++;  // and the value that follows it
+			continue;
+		}
+		if (!strcasecmp(a, "-quake") || !strcasecmp(a, "-hipnotic") ||
+			!strcasecmp(a, "-rogue") || !strcasecmp(a, "-nehahra") ||
+			!strcasecmp(a, "-quoth"))
+			continue;
+
+		strlcat(cmdline, " ", sizeof(cmdline));
+		if (strchr(a, ' '))
+		{
+			strlcat(cmdline, "\"", sizeof(cmdline));
+			strlcat(cmdline, a, sizeof(cmdline));
+			strlcat(cmdline, "\"", sizeof(cmdline));
+		}
+		else
+			strlcat(cmdline, a, sizeof(cmdline));
+	}
+
+	// The new selection, already in command line form.
+	for (i = 1; i < Cmd_Argc(); i++)
+	{
+		strlcat(cmdline, " ", sizeof(cmdline));
+		strlcat(cmdline, Cmd_Argv(i), sizeof(cmdline));
+	}
+
+	// The runtime will not hand the new instance a session while this one
+	// still holds it, so the new instance is told to wait for this process to
+	// exit before it asks. See -relaunchwait in main.
+	dpsnprintf(pidarg, sizeof(pidarg), " -relaunchwait %u", (unsigned)GetCurrentProcessId());
+	strlcat(cmdline, pidarg, sizeof(cmdline));
+
+	memset(&si, 0, sizeof(si));
+	si.cb = sizeof(si);
+	memset(&pi, 0, sizeof(pi));
+
+	Con_Printf("relaunching: %s\n", cmdline);
+
+	if (!CreateProcessA(NULL, cmdline, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+	{
+		Con_Printf("relaunchgame: could not start a new instance (error %u)\n",
+				   (unsigned)GetLastError());
+		return;
+	}
+
+	CloseHandle(pi.hThread);
+	CloseHandle(pi.hProcess);
+
+	// Quit the ordinary way, so the session is torn down before the context.
+	Cbuf_AddText("quit\n");
+#else
+	Con_Printf("relaunchgame: only implemented on Windows\n");
+#endif
+}
+
+/*
+	Wait for the instance that spawned this one to exit, so that the OpenXR
+	runtime is free before the session is created. Five seconds is far longer
+	than a shutdown takes; if it expires anyway, carrying on is better than
+	hanging on the splash screen.
+*/
+static void Sys_WaitForRelaunch (void)
+{
+#ifdef WIN32
+	int i = COM_CheckParm("-relaunchwait");
+	HANDLE parent;
+
+	if (!i || i + 1 >= com_argc)
+		return;
+
+	parent = OpenProcess(SYNCHRONIZE, FALSE, (DWORD)atoi(com_argv[i + 1]));
+	if (!parent)
+		return;  // already gone, which is the common case
+
+	WaitForSingleObject(parent, 5000);
+	CloseHandle(parent);
+
+	// The process is gone, but the runtime may still be letting go of the
+	// session it held. A short cushion here costs nothing and is cheaper
+	// than falling back to flatscreen because the session was refused.
+	Sleep(400);
+#endif
+}
+
 int main (int argc, char *argv[])
 {
 	signal(SIGFPE, SIG_IGN);
@@ -199,6 +336,10 @@ int main (int argc, char *argv[])
 #ifndef WIN32
 	fcntl(0, F_SETFL, fcntl (0, F_GETFL, 0) | FNDELAY);
 #endif
+
+	// If this instance was started by another one to change game, the old
+	// one has to be gone before OpenXR will hand this one a session.
+	Sys_WaitForRelaunch();
 
 	// we don't know which systems we'll want to init, yet...
 	SDL_Init(0);

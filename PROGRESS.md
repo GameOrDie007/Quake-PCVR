@@ -881,3 +881,152 @@ It first shipped labelled "Dimension of the Machine II", which is wrong. The
 rerelease's own executable carries both strings — "Dawn of the Machine
 episode" alongside "Dimension of the Machine" — and `mg3` is the former.
 Corrected in the script and in both installs.
+
+---
+
+# Their debug logging was on screen, and is not any more
+
+Both branches. A line of text sat at the top of the eye buffer at all times,
+just above comfortable view, and never faded.
+
+It is `HandleInput_Default` in `vr_game.c` logging both controller positions
+**every frame**:
+
+```c
+ALOGE("        Right-Controller-Position: %f, %f, %f", ...);
+```
+
+`ALOGE` is Android's error log, which on a Quest goes to logcat where no
+player ever sees it. In this port `vr_common.h` maps it to `Con_Printf`, so it
+lands in the console notify area — top of the screen, 72 lines a second, so it
+is redrawn faster than `con_notifytime` can expire it.
+
+Both calls are now `ALOGV`, which the same header maps to `Con_DPrintf`. That
+still records the line (it goes into the console buffer and `qconsole.log`)
+but does not draw it at `developer 0`, which is what logcat amounts to on PC.
+Proven by the same mechanism next door: `SCR_DrawInfobar`'s "broken console
+margin calculation" warning prints 13,000 times in an eight second run through
+`Con_DPrintf`, and appears nowhere on screen.
+
+This is a fidelity fix rather than a divergence — on their build the player
+sees nothing, and now neither does ours — so it is on **both** branches.
+
+## The margin warning is theirs and stays
+
+While finding the above: `SCR_DrawInfobar` starts its offset at 30 where
+`SCR_InfobarHeight` still starts at 0, so their own consistency check fails
+every frame. Invisible at `developer 0`, so it is left alone on the 1:1 branch
+like the other five defects of theirs. Worth knowing it is there if anyone
+turns `developer` on and wonders why the screen fills up.
+
+---
+
+# The PC branch: expansions from the menu, and a HUD height
+
+## Expansions, from Single Player
+
+Single Player has a fourth entry, **EXPANSIONS**, listing whichever of the six
+official games are present in the install:
+
+    Quake, Scourge of Armagon, Dissolution of Eternity,
+    Dimension of the Past, Dimension of the Machine, Dawn of the Machine
+
+The one running is drawn in red, the highlight bar shows the cursor, and
+choosing another **relaunches the engine**. `menu_expansions` opens the same
+page from the console.
+
+### Why it relaunches rather than switching in place
+
+DarkPlaces can change gamedir at run time — that is what the Mods browser
+does — but `FS_ChangeGameDirs` ends with:
+
+```c
+	VID_Stop();
+	Cbuf_InsertText("\nloadconfig\nvid_restart\n\n");
+```
+
+and `VID_Shutdown` in this port begins with `VR_Shutdown()`, because the
+OpenXR swapchain images are GL textures owned by the context it is about to
+destroy. Nothing brings the session back afterwards: `VR_Startup` is called
+once, from `main`. So an in-engine game switch inside VR ends with the engine
+running on the monitor and the headset showing nothing.
+
+**This also means the existing Mods browser drops out of VR**, on both
+branches. It was recorded as verified in milestone 4, but that was flatscreen;
+the code path says otherwise. Worth a headset check.
+
+Relaunching is also the only way to get a mission pack right. `-hipnotic` and
+`-rogue` select a *game mode*, not just a gamedir — status bar, episode names
+and more — and `COM_ChangeGameTypeForGameDirs` only reaches it for a gamedir
+whose name matches, which the engine reads once at startup.
+
+### How the relaunch works
+
+`relaunchgame <args>` in `sys_sdl.c` rebuilds the current command line: it
+keeps everything the launcher passed (`-basedir`, `-nohome`, anything else),
+drops whatever selected a game (`-game X`, `-hipnotic`, `-rogue`, `-quake`,
+`-nehahra`, `-quoth`), drops `+commands` because re-running a one-shot startup
+command against a different game would be wrong — and `+relaunchgame` would
+loop forever — then appends the new selection and `-relaunchwait <pid>`.
+
+The new instance waits on that pid before touching OpenXR, plus 400ms, because
+the runtime will not hand it a session while the old one still holds it. Then
+the old instance quits the ordinary way, so the session is torn down before
+the context, exactly as it is on a normal exit.
+
+Verified flatscreen, both directions:
+
+| from | command | resulting child |
+|---|---|---|
+| Quake | `relaunchgame -hipnotic` | `Darkplaces-Hipnotic using base gamedirs id1 hipnotic` |
+| Scourge of Armagon | `relaunchgame -game dopa` | `-hipnotic` dropped, `-game dopa` added, dopa paks loaded |
+
+The VR half cannot be tested without a headset. Each part of it is proven
+separately though: tearing the session down before the context is what every
+normal exit already does, and the new instance's startup is an ordinary cold
+start.
+
+## HUD height
+
+Their status bar sits at the bottom of the eye buffer and only rises when you
+pitch your head down past 15 degrees — `Sbar_GetYOffset` in `sbar.c`, meant to
+be glanced at by looking down. On a PC headset that leaves it below
+comfortable view.
+
+`vr_hud_height` (0-50, percent of screen height) lifts it by a constant, with
+their look-down slide still applied on top. **The default is 0, at which the
+function is arithmetically identical to theirs**, so an untouched install is
+unchanged — the same rule the rest of this page follows. It is on the PC
+Options page as "HUD height".
+
+## Is an in-place session rebuild feasible?
+
+Asked, and worth recording. It is possible but it is the fiddliest thing left
+in the port, and it is the one area where a mistake fails badly (a hung
+process, or a black headset).
+
+In favour: `VR_Startup` is already a clean four-call sequence — `TBXR_EnterVR`,
+`TBXR_InitRenderer`, `TBXR_InitActions`, wait for active — and `VR_Shutdown` is
+already called at the right moment for the context.
+
+Against, in the order they would have to be solved:
+
+1. **A restart lands mid-frame.** `vid_restart` runs from the command buffer,
+   which runs inside `Host_Frame`, which runs inside a frame that has already
+   called `TBXR_FrameSetup`. Finishing that frame against a destroyed session
+   means calls on dead handles. The change would have to be deferred to the
+   top of `VR_MainLoop`, with no frame in flight.
+2. **`VR_MainLoop` picks its loop once**, on `vr_active` at startup, so a
+   session that dies mid-run leaves the VR loop calling into nothing.
+3. **The action sets and spaces would have to be torn down and recreated too**,
+   not just the swapchains, and `xrAttachSessionActionSets` is once per
+   session.
+4. **`VR_Startup` ends with `MR_ToggleMenu(2)`**, their credits screen, which
+   would pop up on every game switch and would need factoring out.
+
+None of that is exotic, and the deferred-to-a-safe-point design contains it.
+Call it likely to work with a couple of headset rounds to shake out, and worth
+doing only if the restart proves genuinely annoying in use. The relaunch path
+is not a throwaway either way: it stays the right answer for the mission
+packs, whose game mode is fixed at startup no matter how good the session
+handling gets.

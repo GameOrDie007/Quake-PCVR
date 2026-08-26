@@ -603,7 +603,11 @@ static void HandleInput_Default(  )
 
         //Right-hand specific stuff
         {
-            ALOGE("        Right-Controller-Position: %f, %f, %f",
+            //Theirs, but ALOGE is Con_Printf here while on Android it is
+            //logcat, so as written it fills the notify area at the top of
+            //the eye buffer every frame. ALOGV is Con_DPrintf: logged, not
+            //drawn, which is what logcat amounts to on PC.
+            ALOGV("        Right-Controller-Position: %f, %f, %f",
                   rightRemoteTracking_new.Pose.position.x,
                   rightRemoteTracking_new.Pose.position.y,
                   rightRemoteTracking_new.Pose.position.z);
@@ -702,7 +706,8 @@ static void HandleInput_Default(  )
 
         //Left-hand specific stuff
         {
-            ALOGE("        Left-Controller-Position: %f, %f, %f",
+            //ALOGV rather than ALOGE for the same reason as the right hand.
+            ALOGV("        Left-Controller-Position: %f, %f, %f",
                   leftRemoteTracking_new.Pose.position.x,
                   leftRemoteTracking_new.Pose.position.y,
                   leftRemoteTracking_new.Pose.position.z);
