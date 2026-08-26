@@ -844,6 +844,40 @@ If a future session wants more: the Quake II port's remaining ideas were a
 systematic side-by-side against the standalone, and the observation that
 brightness differences through Virtual Desktop are VD's encode path rather
 than anything the engine can fix. Both apply here.
-- Systematic comparison against the standalone, which is what the Quake II
-  port found most of its remaining fidelity gaps with.
-- Tag once mods are settled.
+
+---
+
+# The four official expansions
+
+Both installs ship every official Quake expansion whose data is on this PC,
+each with its own launcher. `tools/package-release.sh` copies them out of the
+Steam install; `QQ_QUAKEDIR` overrides the location and `QQ_NOEXPANSIONS=1`
+skips them, saving about 1GB.
+
+| launcher | dir | args | source |
+|---|---|---|---|
+| Dimension of the Past | `dopa` | `-game dopa` | their standalone |
+| Scourge of Armagon | `hipnotic` | `-hipnotic` | Steam `Quake/hipnotic` |
+| Dissolution of Eternity | `rogue` | `-rogue` | Steam `Quake/rogue` |
+| Dimension of the Machine | `mg1` | `-game mg1` | Steam `Quake/rerelease/mg1` |
+| Dawn of the Machine | `mg3` | `-game mg3` | Steam `Quake/rerelease/mg3` |
+
+All five load and render. Each was launched from the PC install and quit
+cleanly, leaving its own `config.cfg` in its game directory.
+
+**The two MachineGames episodes are mostly BSP2**, and this engine reads them
+because upstream DarkPlaces added BSP2 in February 2013 — five months before
+`a2210a95`, the commit Team Beef forked. Nothing had to be added for them.
+
+`hipnotic` and `rogue` come from the **classic** folders rather than
+`rerelease/`, because `-hipnotic` and `-rogue` are the switches DarkPlaces was
+written against and the classic paks are far smaller. `mg1` and `mg3` exist
+only under `rerelease/`, and both were verified against the **classic** `id1`
+paks, so none of the rerelease base data is needed.
+
+## mg3 is "Dawn of the Machine"
+
+It first shipped labelled "Dimension of the Machine II", which is wrong. The
+rerelease's own executable carries both strings — "Dawn of the Machine
+episode" alongside "Dimension of the Machine" — and `mg3` is the former.
+Corrected in the script and in both installs.

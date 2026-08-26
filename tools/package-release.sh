@@ -108,7 +108,7 @@ EOF
 #
 # All four were tested against this engine and all four load and render:
 # Scourge of Armagon and Dissolution of Eternity are classic BSP29, while
-# Dimension of the Machine (mg1) and the newer MachineGames episode (mg3) are
+# Dimension of the Machine (mg1) and Dawn of the Machine (mg3) are
 # mostly BSP2 - a format upstream DarkPlaces added in February 2013, five
 # months before the commit Team Beef forked, so this engine reads it.
 #
@@ -148,7 +148,7 @@ if [ -z "$QQ_NOEXPANSIONS" ] && [ -d "$QUAKEDIR" ]; then
 	add_expansion "$QUAKEDIR/rerelease/mg1/pak0.pak" mg1 \
 		"Dimension of the Machine" "-game mg1"
 	add_expansion "$QUAKEDIR/rerelease/mg3/pak0.pak" mg3 \
-		"Dimension of the Machine II" "-game mg3"
+		"Dawn of the Machine" "-game mg3"
 fi
 
 # A short note on what this folder is, next to the launchers.
@@ -167,7 +167,7 @@ HOW TO PLAY
     Scourge of Armagon             (mission pack 1)
     Dissolution of Eternity        (mission pack 2)
     Dimension of the Machine       (mg1, the 2021 MachineGames episode)
-    Dimension of the Machine II    (mg3, the newer MachineGames episode)
+    Dawn of the Machine            (mg3, the newer MachineGames episode)
 
   Only the ones whose data was found when this folder was built are present.
   All five were tested against this engine and all five load and render.
