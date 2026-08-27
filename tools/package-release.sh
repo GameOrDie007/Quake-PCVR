@@ -151,6 +151,20 @@ if [ -z "$QQ_NOEXPANSIONS" ] && [ -d "$QUAKEDIR" ]; then
 		"Dawn of the Machine" "-game mg3"
 fi
 
+# The game select page's entries, drawn in the re-release's own menu font.
+# Quake's ornate lettering is pictures rather than a font, so arbitrary names
+# cannot be written in it; the re-release has that same alphabet as a real
+# font, and this renders the six names from the owner's own copy of it.
+# Skipped silently without python, PIL or a re-release install, in which case
+# the menu falls back to drawing the names as text.
+echo "Menu artwork..."
+for py in python python3; do
+	if command -v $py >/dev/null 2>&1; then
+		$py "$SRC/tools/make-menu-art.py" "$DEST" "$QUAKEDIR" || true
+		break
+	fi
+done
+
 # A short note on what this folder is, next to the launchers.
 cat > "$DEST/README.txt" <<'EOF'
 Quake VR - PCVR port of Team Beef's QuakeQuest

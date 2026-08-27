@@ -1030,3 +1030,121 @@ doing only if the restart proves genuinely annoying in use. The relaunch path
 is not a throwaway either way: it stays the right answer for the mission
 packs, whose game mode is fixed at startup no matter how good the session
 handling gets.
+
+---
+
+# The text at the top was never Team Beef's
+
+Recorded because the first answer was wrong, and the way it was wrong is the
+lesson.
+
+A line of text sat at the top of the eye buffer at all times. The first
+diagnosis was `HandleInput_Default`'s two `ALOGE` controller-position lines,
+which genuinely do print through `Con_Printf` every frame and genuinely did
+belong in the log rather than on screen — that change stands. But it was not
+what he was seeing, and **it was reasoned out of the source rather than
+measured**. The tell was there to be had: he had said it appears in Dimension
+of the Machine and Dawn of the Machine, and it "talks about errors".
+
+Running mg3 flatscreen with `-condebug` for ten seconds settled it in one
+step:
+
+```
+   9967  broken console margin calculation: 30 != 0
+    681  Cvar_Set: variable campaign not found
+```
+
+The second one is it. The 2021 re-release's progs — dopa, mg1 and mg3 all run
+on them — call `cvar_set("campaign", ...)` from a per-frame think, about
+seventy times a second. Their engine has that cvar; this one did not, so
+`Cvar_Set` printed "variable campaign not found" through `Con_Printf` every
+time. That lands in the console notify area, which is the top of the screen,
+refilled far faster than `con_notifytime` can expire it.
+
+`campaign` is now registered in `host.c`, unarchived, and nothing in the
+engine reads it — it exists so their progs have somewhere to put it, which is
+all the re-release engine gives them. Verified: the same run now logs it zero
+times.
+
+The first count is the other half of the earlier note — their own
+`SCR_DrawInfobar` inconsistency, invisible at `developer 0`, still left alone.
+
+## What to do differently
+
+Two rounds were spent on a plausible cause that the log would have named in
+ten seconds. Both games were sitting on this disk the whole time and could be
+run without a headset. **Reproduce it locally before reading source.**
+
+---
+
+# Dawn of the Machine's crash: one malformed model
+
+He reported crashing out of Dawn of the Machine after about five minutes,
+several times. Reproduced without a headset inside ten minutes, by running
+mg3 flatscreen through map1, map2 and map3 with logging on:
+
+```
+Host_Error: model progs/backpackcells.mdl has an invalid ##VALUE (-2147483648 exceeds 0 - 2)
+QuakeC crash report for server:
+s41307: CALL1      precache_model (=precache_model())
+mg3_upgrades.qc : item_upgrade_cells : statement 1
+Host_ShutdownServer
+```
+
+So it is not a crash in the sense of a fault - it is `Host_Error`, which
+shuts the server down and disconnects, dropping the player out of the level.
+In a headset that is indistinguishable from one.
+
+**The cause is a single malformed file in their content.** The check that
+fires is `BOUNDI((int)loadmodel->synctype, 0, 2)` in `Mod_IDP0_Load`, and
+-2147483648 is `0x80000000` — which is floating point negative zero. Dawn of
+the Machine's `progs/backpackcells.mdl` stores `synctype` as a float where the
+MDL format has an int. Every one of the 228 `.mdl` files across id1, both
+mission packs and all four episodes was checked: **it is the only one**, and
+the three other backpacks in its own pak have a clean 0.
+
+`synctype` only decides whether a model's animation starts at a random phase.
+Dropping the player out of the level for it is out of all proportion, so it is
+now clamped with a warning, exactly as `Mod_IDP0_Load` already handles an
+invalid frame interval a few hundred lines above:
+
+```
+progs/backpackcells.mdl has an invalid synctype (-2147483648), changing to 0
+```
+
+Verified: map3 previously died on load, and now loads and stays up. The stock
+message being useless — "an invalid ##VALUE", a stringification bug in the
+macro that has been in DarkPlaces since forever — cost a few minutes and is
+left alone, since fixing it would touch every bounds check in the file.
+
+Both of these are on **both branches**. Neither is a change to their game: the
+episodes are ours to ship, the engine crash is ours to fix, and nothing in
+either fix alters how Quake itself behaves.
+
+## The game list in Quake's own lettering
+
+The names were drawn in a font while everything around them is artwork, and it
+showed. Quake's ornate menu lettering is not a font at all: "NEW GAME",
+"LOAD", "SAVE", "SINGLE" and the rest are pre-rendered pictures in `gfx/`, so
+there is no way to write "Dimension of the Machine" in it. The letters cannot
+even be harvested from the existing pictures — across every word Quake ships
+in that alphabet there is no F, and several names need one.
+
+The 2021 re-release does have that alphabet as a real font, and its own
+expansion menu — the one he pointed at — is drawn with it. `QuakeEX.kpf` is a
+plain zip; `fonts/qfont.png` is the atlas and `fonts/qfont.kfont` is a text
+table of `codepoint x y width height offset`, one line per glyph, all 28 tall,
+with full Latin coverage.
+
+`tools/make-menu-art.py` reads that from **the owner's own Quake install** and
+writes the six names into **his own install** as 32-bit TGAs, the same way the
+packaging script already takes his paks. Nothing of theirs is copied into this
+repository. Without python, PIL or a re-release install it prints a line and
+skips, and the menu falls back to drawing the names as text — the page is
+artwork or text as a whole, never a mixture, so it cannot end up half and
+half.
+
+Drawn at half size, since the glyphs are 28 tall. The atlas bronze is dark
+against a dimmed Quake level and darker still through a headset, so the
+generator lifts it by 1.7 with the hue untouched; the game the player is in
+is left at full brightness and the rest sit at 0.8.

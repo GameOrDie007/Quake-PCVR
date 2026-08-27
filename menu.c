@@ -3235,22 +3235,24 @@ typedef struct gameentry_s
 	const char *dir;    // gamedir to look for; empty means stock Quake
 	const char *name;
 	const char *args;   // what goes on the relaunched command line
+	const char *art;    // gfx/<art>, drawn instead of the name when present
 }
 gameentry_t;
 
 static const gameentry_t gameselect_games[] =
 {
-	{ "",         "Quake",                    ""           },
-	{ "hipnotic", "Scourge of Armagon",       "-hipnotic"  },
-	{ "rogue",    "Dissolution of Eternity",  "-rogue"     },
-	{ "dopa",     "Dimension of the Past",    "-game dopa" },
-	{ "mg1",      "Dimension of the Machine", "-game mg1"  },
-	{ "mg3",      "Dawn of the Machine",      "-game mg3"  },
+	{ "",         "Quake",                    "",           "gfx/gs_quake"    },
+	{ "hipnotic", "Scourge of Armagon",       "-hipnotic",  "gfx/gs_hipnotic" },
+	{ "rogue",    "Dissolution of Eternity",  "-rogue",     "gfx/gs_rogue"    },
+	{ "dopa",     "Dimension of the Past",    "-game dopa", "gfx/gs_dopa"     },
+	{ "mg1",      "Dimension of the Machine", "-game mg1",  "gfx/gs_mg1"      },
+	{ "mg3",      "Dawn of the Machine",      "-game mg3",  "gfx/gs_mg3"      },
 };
 
 #define GAMESELECT_TOTAL ((int)(sizeof(gameselect_games) / sizeof(gameselect_games[0])))
 
 static int gameselect_cursor;
+static qboolean gameselect_art;                 // artwork present for every entry
 static int gameselect_present[GAMESELECT_TOTAL];  // indices into gameselect_games
 static int gameselect_count;
 static int gameselect_current;                  // index into gameselect_present, -1 if none
@@ -3276,6 +3278,7 @@ static void GameSelect_Rebuild(void)
 
 	gameselect_count = 0;
 	gameselect_current = -1;
+	gameselect_art = true;
 
 	for (i = 0; i < GAMESELECT_TOTAL; i++)
 	{
@@ -3286,6 +3289,11 @@ static void GameSelect_Rebuild(void)
 
 		if (GameSelect_IsCurrent(i))
 			gameselect_current = gameselect_count;
+
+		// All of it or none of it, so the page cannot end up half artwork and
+		// half text.
+		if (!FS_FileExists(va(vabuf, sizeof(vabuf), "%s.tga", gameselect_games[i].art)))
+			gameselect_art = false;
 
 		gameselect_present[gameselect_count++] = i;
 	}
@@ -3305,10 +3313,10 @@ static int GameSelect_Choices(void)
 }
 
 /*
-	Their M_Print_Big, a shade narrower. At its own 12 the longest name here,
+	The fallback, for an install whose artwork was never generated. Their
+	M_Print_Big a shade narrower: at its own 12 the longest name here,
 	"Dimension of the Machine", is 288 units wide and runs off a 320 unit menu
-	once it clears the plaque. Same font, same height, so it still reads as
-	part of their menus.
+	once it clears the plaque.
 */
 static void GameSelect_Print(float cx, float cy, const char *str, qboolean highlight)
 {
@@ -3346,6 +3354,7 @@ static void M_Menu_GameSelect_Draw (void)
 
 	for (i = 0; i < gameselect_count; i++)
 	{
+		const gameentry_t *g = &gameselect_games[gameselect_present[i]];
 		float y = 44 + i * 20;
 
 		// The pulsing bar the options pages use. A blinking cursor character
@@ -3354,8 +3363,25 @@ static void M_Menu_GameSelect_Draw (void)
 		if (i == gameselect_cursor)
 			DrawQ_Fill(menu_x + 64, menu_y + y - 4, 248, 20, 0.5 + 0.2 * sin(realtime * M_PI), 0, 0, 0.5, 0);
 
-		// The one already running is drawn in the highlight colour.
-		GameSelect_Print (72, y, gameselect_games[gameselect_present[i]].name, i == gameselect_current);
+		/*
+			The name as artwork in the re-release's own menu font, which is what
+			Quake's ornate lettering is: pictures, not a font, so "NEW GAME" and
+			"LOAD" exist and nothing else can be written in it. tools/
+			make-menu-art.py builds these from the owner's own install at
+			packaging time. Drawn at half size - the glyphs are 28 tall - and the
+			one already running is left at full brightness while the rest are
+			taken down a little.
+		*/
+		if (gameselect_art)
+		{
+			cachepic_t *art = Draw_CachePic (g->art);
+			float shade = (i == gameselect_current) ? 1.0f : 0.8f;
+
+			DrawQ_Pic (menu_x + 72, menu_y + y, art, art->width * 0.5f, art->height * 0.5f,
+					   shade, shade, shade, 1, 0);
+		}
+		else
+			GameSelect_Print (72, y, g->name, i == gameselect_current);
 	}
 
 	// Only worth saying while it applies.
