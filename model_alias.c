@@ -1061,7 +1061,26 @@ void Mod_IDP0_Load(dp_model_t *mod, void *buffer, void *bufferend)
 	loadmodel->numframes = LittleLong(pinmodel->numframes);
 	BOUNDI(loadmodel->numframes,0,65536);
 	loadmodel->synctype = (synctype_t)LittleLong (pinmodel->synctype);
-	BOUNDI((int)loadmodel->synctype,0,2);
+	/*
+		Dawn of the Machine's progs/backpackcells.mdl stores this field as a
+		floating point negative zero - 0x80000000 - where the format has an
+		int, so it reads back as INT_MIN. Stock's bounds check here is a
+		Host_Error, which shuts the server down and drops the player out of
+		the level the moment mg3_upgrades.qc precaches that model. It is the
+		only one of the 228 models across id1, the mission packs and the four
+		episodes that is malformed; every other backpack in the same pak has a
+		clean 0.
+
+		synctype only decides whether a model's animation begins at a random
+		phase, so a bad one is not worth ending the game for. Clamped with a
+		warning, exactly as an invalid frame interval is handled a few hundred
+		lines above.
+	*/
+	if ((int)loadmodel->synctype < 0 || (int)loadmodel->synctype >= 2)
+	{
+		Con_Printf("%s has an invalid synctype (%i), changing to 0\n", loadmodel->name, (int)loadmodel->synctype);
+		loadmodel->synctype = ST_SYNC;
+	}
 	// convert model flags to EF flags (MF_ROCKET becomes EF_ROCKET, etc)
 	i = LittleLong (pinmodel->flags);
 	loadmodel->effects = ((i & 255) << 24) | (i & 0x00FFFF00);

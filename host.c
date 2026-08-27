@@ -80,6 +80,22 @@ cvar_t cl_maxfps = {CVAR_SAVE, "cl_maxfps", "0", "maximum fps cap, 0 = unlimited
 cvar_t cl_maxfps_alwayssleep = {0, "cl_maxfps_alwayssleep","1", "gives up some processing time to other applications each frame, value in milliseconds, disabled if cl_maxfps is 0"};
 cvar_t cl_maxidlefps = {CVAR_SAVE, "cl_maxidlefps", "20", "maximum fps cap when the game is not the active window (makes cpu time available to other programs"};
 
+/*
+	The 2021 re-release's progs - Dimension of the Past, Dimension of the
+	Machine and Dawn of the Machine all run on them - call
+	cvar_set("campaign", ...) from a per-frame think, around seventy times a
+	second. Their engine has that cvar. This one did not, so every call
+	printed "Cvar_Set: variable campaign not found" through Con_Printf, which
+	puts it in the console notify area - the top of the screen, refilled far
+	faster than con_notifytime can expire it. In a headset that is a
+	permanent line of text just above comfortable view.
+
+	Nothing in this engine reads it. It exists so their progs have somewhere
+	to put it, which is all the re-release engine gives them. Not archived,
+	so it stays out of config.cfg.
+*/
+cvar_t campaign = {0, "campaign", "0", "which re-release campaign is running; set by their progs, unused by this engine"};
+
 cvar_t developer = {CVAR_SAVE, "developer","0", "shows debugging messages and information (recommended for all developers and level designers); the value -1 also suppresses buffering and logging these messages"};
 cvar_t developer_extra = {0, "developer_extra", "0", "prints additional debugging messages, often very verbose!"};
 cvar_t developer_insane = {0, "developer_insane", "0", "prints huge streams of information about internal workings, entire contents of files being read/written, etc.  Not recommended!"};
@@ -254,6 +270,7 @@ static void Host_InitLocal (void)
 	Cvar_RegisterVariable (&cl_maxfps_alwayssleep);
 	Cvar_RegisterVariable (&cl_maxidlefps);
 
+	Cvar_RegisterVariable (&campaign);
 	Cvar_RegisterVariable (&developer);
 	Cvar_RegisterVariable (&developer_extra);
 	Cvar_RegisterVariable (&developer_insane);
