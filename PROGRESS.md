@@ -1274,3 +1274,67 @@ Quake**, so a fall that should have killed him at 1 health does nothing; and
 **you only drown at waterlevel 3**, so standing in shallow water is survivable
 indefinitely. Neither has been confirmed against what he saw, and the one thing
 that would settle it is where in the map it happened.
+
+---
+
+# Confirmed in the headset — both builds tagged
+
+"Everything seems to be good", after a session run with `-condebug` covering
+smooth turning, the HUD height slider, switching games from the list, Dawn of
+the Machine including map3, and the log report clean afterwards.
+
+Tags moved to the branch heads: `quakequest-vr-1to1` and `quakequest-vr-pc`.
+They had been held three rounds deliberately, because everything added since
+the last tagging could only be proven with a headset on.
+
+## What the last three rounds fixed
+
+None of it was in the VR layer, and none of it was Team Beef's:
+
+| symptom | cause |
+|---|---|
+| A line of text at the top of view, permanently | The re-release progs call `cvar_set("campaign", ...)` seventy times a second; this engine had no such cvar, so `Cvar_Set` warned every time into the notify area |
+| Dropped out of Dawn of the Machine on a map load | `progs/backpackcells.mdl` stores `synctype` as float negative zero; the stock bounds check made that a `Host_Error`. The only malformed model of 228 across all six games |
+| Dropped out again a few minutes into play | The re-release sends server message 52 for achievements, where DarkPlaces has `svc_effect`. Misparsed, then fatal |
+
+Their per-frame `ALOGE` controller logging was also moved off the screen to
+`Con_DPrintf`, which was a real per-frame print into the same notify area even
+though it was not the text he was seeing.
+
+The lesson, recorded above in full: two rounds went to a cause reasoned out of
+the source when ten seconds of `-condebug` named it outright. Every one of
+these games runs flatscreen on this PC without a headset, and the engine can
+drive itself through `+"defer <sec> <command>"`.
+
+## The state of it
+
+Two installs, both self-contained and portable:
+
+| branch | tag | install |
+|---|---|---|
+| `vr-1to1` | `quakequest-vr-1to1` | `E:\Games\Quake VR (1to1)` — their game on PC, nothing added |
+| `vr-pc` | `quakequest-vr-pc` | `E:\Games\Quake VR (PC)` — the above plus the PC additions |
+
+Both carry Quake, both mission packs and all four episodes, the owner's paks,
+the soundtrack and his Quest saves. The PC build adds the game select page in
+the re-release's own menu font, a PC Options page (supersampling,
+anti-aliasing, particle style, door Z-fighting, HUD height), and his own
+preference of smooth turning at 5.
+
+## Known and deliberately not fixed
+
+**The in-game Mods browser still drops out of VR.** `FS_ChangeGameDirs` ends
+in `vid_restart`, `VID_Shutdown` destroys the GL context the OpenXR swapchain
+images belong to, and nothing restarts the session. The game select page avoids
+it by relaunching; the Mods browser could be routed the same way in about
+twenty lines, and was left alone rather than swapping the binary out from under
+a working test session.
+
+**Water at the surface**, reported as bouncing on top at 1 health without
+dying, was investigated and nothing was found: `sv_user.c` is byte identical to
+stock, and his own save with the player moved into map1's water sinks, drowns
+and dies correctly. Water cancelling fall damage and drowning needing
+waterlevel 3 both explain it without a bug. Not reproduced, not confirmed.
+
+**The five defects of theirs reproduced deliberately** stand, black blood
+included — see above.
