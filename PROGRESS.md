@@ -1148,3 +1148,83 @@ Drawn at half size, since the glyphs are 28 tall. The atlas bronze is dark
 against a dimmed Quake level and darker still through a headset, so the
 generator lifts it by 1.7 with the hue untouched; the game the player is in
 is left at full brightness and the rest sit at 0.8.
+
+---
+
+# The second Dawn of the Machine crash: an achievement
+
+He played a couple of minutes and was thrown out again — a different failure
+from the malformed model, and this one caught in his own log because the
+session was launched with `-condebug`:
+
+```
+packet dump:  27:svc_killedmonster  52:svc_effect  69:<unknown>
+Host_Error: CL_ParseServerMessage: Illegible server message
+0000:1B344143 485F4652 49454E44 4C595F46 .4ACH_FRIENDLY_F
+0010:49524500                            IRE.
+```
+
+The bytes are the whole story: `27`, then `52`, then the string
+`ACH_FRIENDLY_FIRE`. Decompiling `Killed()` out of mg3's progs.dat confirms it
+exactly —
+
+```
+2506  STORE_F  (val 2)     ; MSG_ALL
+2507  STORE_F  (val 52)
+2508  CALL2 -> WriteByte
+2510  STORE_F  "ACH_FRIENDLY_FIRE"
+2511  CALL2 -> WriteString
+```
+
+**The re-release uses server message 52 for achievements, and DarkPlaces uses
+52 for its own `svc_effect` extension.** So the engine read `ACH_FRIENDLY_...`
+as an effect's position and model index, hit the leftovers as an unknown
+command, and called `Host_Error` — which shuts the server down and drops the
+player out of the level.
+
+Every episode does it. Sweeping all six games' progs for constant `WriteByte`
+values: id1, hipnotic and rogue send nothing unusual, while **dopa, mg1 and
+mg3 all send 52**. mg3 has 14 achievements and they fire on things as ordinary
+as finding a secret or hurting a friendly, so this was a minefield rather than
+a rare event. (mg3 also writes a 244, but that is a data byte inside a temp
+entity message, not a command.)
+
+## Two changes, one narrow and one general
+
+**The message is now read and dropped.** In `CL_ParseServerMessage`'s
+`svc_effect` case, if the next four bytes are `ACH_` the string is consumed and
+noted at developer level. In a real `svc_effect` those bytes are the first
+float of a position, and the classic progs never send this message at all, so
+the prefix separates the two cleanly.
+
+**An unrecognised command is no longer fatal.** Stock ends the game; for a
+local single player session that is out of all proportion, and it is what cost
+him two evenings. A lost packet is a condition the netcode already handles, so
+the rest of that packet is now abandoned instead — `readcount` is set to the
+end, which lets the loop finish the ordinary way so everything after it still
+runs. A stream that has genuinely lost its place fails on every packet rather
+than one, so it still reaches the same error after 32 in a row, under two
+seconds, rather than freezing quietly. The packet dump prints once to the
+screen and to the log thereafter, so it cannot become another permanent line
+of notify text.
+
+## Verified
+
+A temporary `sv_testachievement` command was added to emit the exact bytes
+from the server, then removed before committing:
+
+| sent | before | after |
+|---|---|---|
+| `52` + `"ACH_TEST_MESSAGE"` | `Illegible server message`, server shut down | `achievement ACH_TEST_MESSAGE, which this engine has no way to award`, session continues |
+| `100` + string (unknown command) | `Illegible server message`, server shut down | `packet dump: 100:<unknown>`, session continues |
+
+Fired twice in each run, and the game was still connected and playing at the
+end of both.
+
+## Worth noting
+
+This is the third distinct fault in these episodes, and none of them are Team
+Beef's: a cvar their progs need, a malformed model, and a protocol number
+collision. The episodes are ours to ship, so they are ours to make work — but
+it is a reminder that 2026 content on a 2013 engine is where the remaining
+risk in this port lives, not in the VR layer.

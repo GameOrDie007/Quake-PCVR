@@ -3344,6 +3344,14 @@ CL_ParseServerMessage
 =====================
 */
 int parsingerror = false;
+
+/*
+	Consecutive packets carrying a command this engine does not know. One is
+	a message from progs written for another engine and is survivable; a
+	stream that has genuinely lost its place fails on every packet, and that
+	still has to be reported. See the default case in CL_ParseServerMessage.
+*/
+static int cl_unknowncommands = 0;
 void CL_ParseServerMessage(void)
 {
 	int			cmd;
@@ -3353,6 +3361,7 @@ void CL_ParseServerMessage(void)
 	const char		*cmdlogname[32], *temp;
 	int			cmdindex, cmdcount = 0;
 	qboolean	qwplayerupdatereceived;
+	qboolean	unknowncommand = false;
 	qboolean	strip_pqc;
 	char vabuf[1024];
 
@@ -3804,8 +3813,37 @@ void CL_ParseServerMessage(void)
 						i &= 31;
 					}
 					description[strlen(description)-1] = '\n'; // replace the last space with a newline
-					Con_Print(description);
-					Host_Error ("CL_ParseServerMessage: Illegible server message");
+
+					/*
+						Stock ends the game here. For a local single player session
+						that is out of all proportion to one message the engine does
+						not recognise, and the re-release episodes do send those. A
+						lost packet is a condition the netcode already handles, so
+						the rest of this one is abandoned instead - setting readcount
+						to the end makes the next read finish the loop the ordinary
+						way, so everything after it still runs.
+
+						A stream that has really lost its place fails on every packet
+						rather than one, so it still ends in the same error after 32
+						in a row - under two seconds - rather than freezing quietly.
+					*/
+					unknowncommand = true;
+
+					if (++cl_unknowncommands > 32)
+					{
+						cl_unknowncommands = 0;
+						Con_Print(description);
+						Host_Error ("CL_ParseServerMessage: Illegible server message");
+					}
+
+					// Once on screen; after that it would refill the notify area
+					// faster than con_notifytime can clear it.
+					if (cl_unknowncommands == 1)
+						Con_Print(description);
+					else
+						Con_DPrint(description);
+
+					cl_message.readcount = cl_message.cursize;
 				}
 				break;
 
@@ -4010,6 +4048,30 @@ void CL_ParseServerMessage(void)
 				break;
 
 			case svc_effect:
+				/*
+					The 2021 re-release's progs use 52 for an achievement -
+					WriteByte 52 then WriteString "ACH_..." - where DarkPlaces has
+					its own svc_effect extension at the same number. Dimension of
+					the Past, Dimension of the Machine and Dawn of the Machine all
+					send them, on events as ordinary as finding a secret or hurting
+					a friendly, and reading one as an effect desynchronised the
+					stream and ended the session with "Illegible server message".
+					In a headset that is indistinguishable from a crash.
+
+					Nothing here has achievements to award, so it is read and
+					dropped. The prefix is what tells the two apart: in a real
+					svc_effect those four bytes are the first float of a position,
+					and the classic progs never send this message at all - only
+					DarkPlaces' own mods and these do.
+				*/
+				if (cl_message.readcount + 4 <= cl_message.cursize &&
+					!memcmp(cl_message.data + cl_message.readcount, "ACH_", 4))
+				{
+					char achievement[MAX_INPUTLINE];
+					MSG_ReadString(&cl_message, achievement, sizeof(achievement));
+					Con_DPrintf("achievement %s, which this engine has no way to award\n", achievement);
+					break;
+				}
 				CL_ParseEffect ();
 				break;
 
@@ -4205,6 +4267,10 @@ void CL_ParseServerMessage(void)
 
 	CL_UpdateMoveVars();
 //	R_TimeReport("UpdateMoveVars");
+
+	// A packet that parsed cleanly clears the run of bad ones.
+	if (!unknowncommand)
+		cl_unknowncommands = 0;
 
 	parsingerror = false;
 
