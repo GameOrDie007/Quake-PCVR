@@ -40,6 +40,17 @@ cp "$SRC"/*.dll "$DEST/"
 echo "Their shipped config and weapon wheel..."
 if [ ! -f "$DEST/id1/config.cfg" ]; then
 	cp "$SRC/../QuakeQuest-src/assets/config.cfg" "$DEST/id1/config.cfg"
+
+	# The owner's own preference, and only into a config this line just
+	# created - an install that already has one is never touched. Their
+	# build defaults to snap turning (vr_yawmode 1); he plays smooth at 5,
+	# and a rebuilt-from-scratch install should not quietly go back to snap.
+	# The smooth turn speed is the sensitivity cvar, which is what the
+	# Controller page's slider writes. Both stay changeable in that menu.
+	#
+	# id1 is enough for every game: a gamedir with no config.cfg of its own
+	# finds id1's through the search path, then writes its own on exit.
+	printf '"vr_yawmode" "2"\n"sensitivity" "5"\n' >> "$DEST/id1/config.cfg"
 fi
 cp "$SRC/../QuakeQuest-src/assets/weaponwheel.json" "$DEST/id1/"
 
