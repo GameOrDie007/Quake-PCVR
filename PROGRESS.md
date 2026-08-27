@@ -1228,3 +1228,49 @@ Beef's: a cvar their progs need, a malformed model, and a protocol number
 collision. The episodes are ours to ship, so they are ours to make work — but
 it is a reminder that 2026 content on a 2013 engine is where the remaining
 risk in this port lives, not in the VR layer.
+
+## Smooth turning at 5, everywhere
+
+His preference, not a default change in the engine. `vr_yawmode` is 2 (smooth;
+their default is 1, snap) and the smooth turn speed is the `sensitivity` cvar —
+that is what the Controller page's "Smooth Turn Speed" slider writes, bounded 1
+to 10.
+
+Both are `CVAR_SAVE`, so the archived value in `config.cfg` is what actually
+decides, and both are registered during `CL_Init`/`CL_InitInput`, which the
+startup log shows running before `execing config.cfg` — so the archived value
+is not discarded the way a late-registered cvar's would be.
+
+Set in every `config.cfg` in both installs: id1, hipnotic, rogue, dopa, mg1,
+mg3. A gamedir with no config of its own finds id1's through the search path
+and then writes its own on exit, so new ones inherit it too. The packaging
+script now appends the same two lines when it creates a config from scratch —
+only then, so an install that already has one is never touched. Both stay
+changeable in the Controller menu.
+
+## Water in map1: investigated, works
+
+He reported bouncing on top of water at 1 health without dying, and wondered
+whether something was left in debug. Checked without a headset, because his
+save was sitting there:
+
+- `sv_user.c`, which is where Quake's water movement and drowning live, is
+  **byte identical to stock** — Team Beef changed nothing about water. The only
+  physics change in their whole changeset is `SV_SetWeapon_ClientOrigin` in
+  `sv_phys.c`, which moves the entity origin momentarily when a shot is fired.
+- mg3's `start` hub has **no water at all**; `map1`, where he was, has 982
+  water leafs. Neither map has a water brush entity — it is ordinary world
+  water.
+- Copying his own save, editing the player's origin into the middle of map1's
+  largest water volume and loading it: he **sinks to the floor**
+  (z −250 → −359.97), `waterlevel 3`, `watertype -3`, and after about ten
+  seconds drowns — health 22 → −6, `deadflag 3`, `movetype` to
+  MOVETYPE_TOSS. Correct Quake behaviour, start to finish.
+
+So deep water in that map is not broken, and nothing debug-related is enabled.
+What has not been reproduced is the surface behaviour he actually saw. Two
+ordinary explanations fit without any bug: **water cancels fall damage in
+Quake**, so a fall that should have killed him at 1 health does nothing; and
+**you only drown at waterlevel 3**, so standing in shallow water is survivable
+indefinitely. Neither has been confirmed against what he saw, and the one thing
+that would settle it is where in the map it happened.
