@@ -1,5 +1,16 @@
 # QuakeQuest -> PCVR: Progress
 
+The development log for this port, kept as the work went along. It is a
+record rather than documentation - see README.md for what the port is and
+how to use it.
+
+Two builds were developed side by side: this one, and a strict 1:1 reference
+build carrying no additions at all, which existed to prove the port stayed
+faithful to Team Beef's game. Only this one is published, so the log refers
+throughout to a `vr-1to1` branch and a `quakequest-vr-1to1` tag that are not
+in this repository. Everything said about them is still worth reading: the
+1:1 build is the reason the additions here can be trusted to be additions.
+
 ---
 
 # STATUS: 1:1 PORT COMPLETE - tag `quakequest-vr-1to1`

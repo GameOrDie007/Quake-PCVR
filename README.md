@@ -22,22 +22,29 @@ eye, 72Hz.
 * **id Software** — Quake.
 
 This repository is the full DarkPlaces history with the port on top, so
-`git diff a2210a95..vr-1to1` shows precisely what was changed and nothing is
+`git diff a2210a95..main` shows precisely what was changed and nothing is
 taken on trust.
 
-## Two builds
+## How faithful this is
 
-| branch | what it is |
-|---|---|
-| `vr-1to1` | QuakeQuest on PC. Nothing added. Five defects of theirs are reproduced deliberately, black blood included. |
-| `vr-pc` | The above plus PC-only additions, every one of them defaulting to Team Beef's value so an untouched install behaves identically. |
+The port was built against a **strict 1:1 reference build** kept alongside it
+throughout: QuakeQuest on PC with nothing added, right down to reproducing five
+defects of theirs deliberately, black blood included. Every PC addition here
+was made only after the 1:1 build behaved identically to their Quest release,
+and **every added option defaults to Team Beef's own value**, so an untouched
+install behaves exactly as their game does.
 
-What `vr-pc` adds:
+What this build adds on top:
 
 * **A game select page** in front of Single Player — Quake, both mission packs
   and all four official episodes, drawn in the 2021 re-release's own menu font.
 * **A PC Options page** — supersampling, anti-aliasing, particle style (this is
   the red blood switch), the door Z-fighting fix, and HUD height.
+
+`PROGRESS.md` is the development log, and it is unusually complete: how the
+base commit was identified by hashing 212 engine files against upstream
+history, what was taken from Team Beef wholesale, which of their defects were
+kept on purpose, and every bug found along the way with the evidence for it.
 
 ## What you need
 
@@ -132,8 +139,9 @@ messages show their internal names; everything still runs.
   rather than their real wording. Their text exists only inside the re-release's
   own engine, in neither the paks nor its data files. Everything else, including
   every ending, is the real text.
-* **Black blood** in the `vr-1to1` build is Team Beef's own behaviour, verified
-  against their standalone, and is left alone. The `vr-pc` build has a switch.
+* **Black blood** is Team Beef's own behaviour, not a porting defect - verified
+  three ways, including against their standalone on a Quest. It is left alone,
+  and PC Options has a switch that turns blood back to classic Quake red.
 
 ## Licence
 
