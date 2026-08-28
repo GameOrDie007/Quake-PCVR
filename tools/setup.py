@@ -81,6 +81,67 @@ def add_expansions(dest, quakedir):
     return added
 
 
+def find_file(folder, name):
+    """A file in a folder, whatever case it is stored in.
+
+    Steam ships the classic game as id1/PAK0.PAK and the re-release ships
+    id1/pak0.pak, and a release may be unzipped onto a case sensitive drive.
+    """
+    if not os.path.isdir(folder):
+        return None
+    want = name.lower()
+    for entry in os.listdir(folder):
+        if entry.lower() == want:
+            return os.path.join(folder, entry)
+    return None
+
+
+def add_base_game(dest, quakedir):
+    """Quake itself. The classic paks are preferred: they are what
+    DarkPlaces was written against, and pak1 is the registered content.
+    """
+    id1 = os.path.join(dest, "id1")
+    if not os.path.isdir(id1):
+        os.makedirs(id1)
+
+    copied = 0
+    for src_dir in (os.path.join(quakedir, "id1"),
+                    os.path.join(quakedir, "rerelease", "id1")):
+        for pak in ("pak0.pak", "pak1.pak"):
+            if os.path.isfile(os.path.join(id1, pak)):
+                continue
+            src = find_file(src_dir, pak)
+            if src:
+                print("  %s..." % pak)
+                shutil.copyfile(src, os.path.join(id1, pak))
+                copied += 1
+    return copied
+
+
+def add_soundtrack(dest, quakedir):
+    """The re-release carries the soundtrack as ogg. DarkPlaces plays it
+    from sound/cdtracks, which is where their Quest build expects it too.
+    """
+    src = os.path.join(quakedir, "rerelease", "id1", "music")
+    if not os.path.isdir(src):
+        return 0
+
+    target = os.path.join(dest, "id1", "sound", "cdtracks")
+    if not os.path.isdir(target):
+        os.makedirs(target)
+
+    copied = 0
+    for name in sorted(os.listdir(src)):
+        if not name.lower().endswith((".ogg", ".mp3", ".wav", ".flac")):
+            continue
+        out = os.path.join(target, name.lower())
+        if os.path.isfile(out):
+            continue
+        shutil.copyfile(os.path.join(src, name), out)
+        copied += 1
+    return copied
+
+
 def run(script, *args):
     """Run one of the generators with the interpreter running this."""
     path = os.path.join(HERE, script)
@@ -97,20 +158,32 @@ def main():
     dest = sys.argv[1] if len(sys.argv) > 1 else os.getcwd()
     quakedir = find_quake(sys.argv[2] if len(sys.argv) > 2 else None)
 
+    if quakedir:
+        print("Quake found at %s" % quakedir)
+        print("Game data...")
+        if not add_base_game(dest, quakedir):
+            print("  already here")
+
     if not os.path.isfile(os.path.join(dest, "id1", "pak0.pak")):
         sys.stderr.write(
-            "No id1/pak0.pak in %s.\n"
-            "Copy pak0.pak and pak1.pak from your Quake into the id1 folder first.\n"
-            % dest)
+            "\nNo Quake data found, and none in %s\n\n"
+            "Either install Quake where this can find it - Steam and GOG are\n"
+            "looked in automatically - or copy pak0.pak and pak1.pak from your\n"
+            "own copy into the id1 folder and run this again. Set QQ_QUAKEDIR if\n"
+            "it is installed somewhere unusual.\n"
+            % os.path.join(os.path.abspath(dest), "id1"))
         return 1
 
     if quakedir:
-        print("Quake data found at %s" % quakedir)
         print("Expansions...")
         if not add_expansions(dest, quakedir):
             print("  none found")
+
+        print("Soundtrack...")
+        tracks = add_soundtrack(dest, quakedir)
+        print("  %s" % ("%d tracks" % tracks if tracks else "already here, or none to copy"))
     else:
-        print("No Quake install found, so no expansions were added.")
+        print("No Quake install found, so no expansions or soundtrack were added.")
         print("Set QQ_QUAKEDIR to point at it if you have one.")
 
     print("Episode message text...")

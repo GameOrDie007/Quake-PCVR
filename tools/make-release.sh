@@ -50,15 +50,9 @@ for t in setup.py make-qc-strings.py make-menu-art.py; do
 	fi
 done
 
-cat > "$STAGE/Setup.bat" <<'EOF'
-@echo off
-rem Run this once, after copying pak0.pak and pak1.pak into the id1 folder.
-rem It adds any expansions it can find and builds the menu artwork and the
-rem message text for the MachineGames episodes from your own copy of Quake.
-cd /d "%~dp0"
-python tools\setup.py . || py tools\setup.py .
-pause
-EOF
+# Setup.bat is a real file in tools/, so the copy in a release and the copy
+# in a folder built here can never drift apart.
+cp "$SRC/tools/Setup.bat" "$STAGE/"
 
 cat > "$STAGE/Quake VR.bat" <<'EOF'
 @echo off
@@ -74,13 +68,21 @@ cd /d "%~dp0"
 start "" "%~dp0darkplaces-sdl.exe" -basedir . -nohome -novr -window %*
 EOF
 
-cat > "$STAGE/id1/PUT YOUR PAK FILES HERE.txt" <<'EOF'
-Copy pak0.pak and pak1.pak from your own copy of Quake into this folder, then
-run Setup.bat in the folder above.
+cat > "$STAGE/id1/IF SETUP COULD NOT FIND QUAKE.txt" <<'EOF'
+Setup.bat normally fills this folder in for you. It looks for Quake in the
+usual Steam and GOG locations and copies the game, the expansions and the
+soundtrack out of your own install.
+
+It only needs you if it could not find Quake - if it is installed somewhere
+unusual, or on another drive. Two ways to fix that:
+
+  * Set QQ_QUAKEDIR to the folder containing id1, then run Setup.bat again.
+  * Or copy pak0.pak and pak1.pak from your own Quake into this folder by
+    hand, and run Setup.bat again to do the rest.
 
 Quake is id Software's and is not distributed here. The 2021 re-release on
 Steam or GOG is the easiest source: it has Quake, both mission packs and all
-four official episodes, and Setup.bat will find and add them for you.
+four official episodes.
 EOF
 
 cp "$SRC/COPYING" "$STAGE/LICENSE.txt"
