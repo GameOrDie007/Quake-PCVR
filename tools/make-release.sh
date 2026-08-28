@@ -20,7 +20,14 @@ cd "$(dirname "$0")/.."
 SRC=$(pwd)
 
 OUT=${1:-"$SRC/release"}
-NAME="quake-vr-pc"
+
+# Named after the branch, so a 1:1 build cannot go out labelled as the PC one.
+# QQ_RELEASE_NAME overrides.
+case "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" in
+	vr-1to1) DEFAULTNAME="quake-vr-1to1" ;;
+	*)       DEFAULTNAME="quake-vr-pc" ;;
+esac
+NAME=${QQ_RELEASE_NAME:-$DEFAULTNAME}
 STAGE="$OUT/$NAME"
 
 if [ ! -f "$SRC/darkplaces-sdl.exe" ]; then
