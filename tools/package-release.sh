@@ -176,6 +176,22 @@ for py in python python3; do
 	fi
 done
 
+# The re-release episodes' message text. Their QuakeC replaced every
+# player-facing string with a localisation token their own engine resolves
+# internally, and that table is not in the game data - so this rebuilds it
+# from classic Quake's own progs.dat, where the original wording still is.
+# Without it the engine prints the tokens, which is still better than the
+# silence they produced before ex_centerprint was implemented at all.
+if [ -d "$DEST/dopa" ] || [ -d "$DEST/mg1" ] || [ -d "$DEST/mg3" ]; then
+	echo "Episode message text..."
+	for py in python python3; do
+		if command -v $py >/dev/null 2>&1; then
+			$py "$SRC/tools/make-qc-strings.py" "$DEST" || true
+			break
+		fi
+	done
+fi
+
 # A short note on what this folder is, next to the launchers.
 cat > "$DEST/README.txt" <<'EOF'
 Quake VR - PCVR port of Team Beef's QuakeQuest

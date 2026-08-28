@@ -3679,6 +3679,9 @@ static qboolean SVVM_load_edict(prvm_prog_t *prog, prvm_edict_t *ent)
 	return true;
 }
 
+// Defined in svvm_cmds.c, beside the builtins it feeds.
+void SV_LoadQCStrings(void);
+
 static void SV_VM_Setup(void)
 {
 	prvm_prog_t *prog = SVVM_prog;
@@ -3719,6 +3722,37 @@ static void SV_VM_Setup(void)
 	prog->ExecuteProgram        = SVVM_ExecuteProgram;
 
 	PRVM_Prog_Load(prog, sv_progs.string, NULL, 0, SV_REQFUNCS, sv_reqfuncs, SV_REQFIELDS, sv_reqfields, SV_REQGLOBALS, sv_reqglobals);
+
+	/*
+		The 2021 re-release's QuakeC declares ex_centerprint, ex_sprint and
+		ex_bprint with empty bodies and lets its own engine implement them by
+		name. Every player-facing message in Dimension of the Past, Dimension
+		of the Machine and Dawn of the Machine goes through them, so on any
+		other engine they all silently do nothing - no key messages, no secret
+		notifications, no hub hints.
+
+		A QuakeC function with first_statement 0 is an empty body: statement 0
+		is the reserved DONE every progs.dat begins with, a real function
+		starts later, and a builtin is already negative. So this only ever
+		touches a stub, and Quake's own progs, both mission packs and any mod
+		that implements these itself are left exactly alone.
+	*/
+	{
+		static const char * const exname[3] = {"ex_centerprint", "ex_sprint", "ex_bprint"};
+		int i;
+
+		SV_LoadQCStrings();
+
+		for (i = 0; i < 3; i++)
+		{
+			mfunction_t *f = PRVM_ED_FindFunction(prog, exname[i]);
+			if (f && f->first_statement == 0)
+			{
+				f->first_statement = -(641 + i);
+				Con_DPrintf("%s implemented as builtin #%i\n", exname[i], 641 + i);
+			}
+		}
+	}
 
 	// some mods compiled with scrambling compilers lack certain critical
 	// global names and field names such as "self" and "time" and "nextthink"
