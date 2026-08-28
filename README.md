@@ -152,6 +152,13 @@ messages show their internal names; everything still runs.
 * **Black blood** is Team Beef's own behaviour, not a porting defect - verified
   three ways, including against their standalone on a Quest. It is left alone,
   and PC Options has a switch that turns blood back to classic Quake red.
+* **The desktop window is black while you play.** The game is in the headset
+  and nothing is wrong with it, but the monitor shows nothing. The mirror is
+  drawn every frame and then thrown away: the engine swaps the window once per
+  eye from inside the eye render, so the blit lands in a buffer that has
+  already been presented. Moving it earlier means blitting in the middle of an
+  eye pass, which breaks the headset outright. It needs solving properly rather
+  than guessing, so for now the window stays black.
 
 ## Licence
 

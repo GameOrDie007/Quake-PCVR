@@ -76,6 +76,10 @@ static GLboolean stageSupported = GL_FALSE;
 // vid.width/vid.height are the eye buffer in VR.
 extern int vid_mirrorwidth;
 extern int vid_mirrorheight;
+extern cvar_t vr_mirror;
+// In vid_sdl.c, which owns the window. Applied here rather than during the
+// engine's screen update, so no SDL call lands inside a per-eye render.
+void VID_ApplyMirrorMode(void);
 
 // GetFOV lives with the other engine-facing entry points in vr_pc.c, but the
 // value is produced here, as it is in their TBXR_Common.c.
@@ -1275,6 +1279,21 @@ void TBXR_submitFrame(void)
 		XrPosef xfHeadFromEye = gAppState.Projections[eye].pose;
 		stageFromEye[eye] = XrPosef_Multiply(gAppState.xfStageFromHead, xfHeadFromEye);
 	}
+
+	/*
+		Back where this always was.
+
+		Moving it into VID_Finish, to get it in front of the window swap, broke
+		the headset: VID_Finish is reached from inside the per-eye render, so
+		the blit ran mid-eye and disturbed the render even once the framebuffer
+		bindings were put back. Here it is after everything, which costs the
+		mirror a frame of latency and is the arrangement that is known to leave
+		the headset alone.
+	*/
+	VID_ApplyMirrorMode();
+
+	if (vr_mirror.integer != 0)
+		TBXR_MirrorToWindow();
 
 	gAppState.LayerCount = 0;
 	memset(gAppState.Layers, 0, sizeof(xrCompositorLayer_Union) * ovrMaxLayerCount);
