@@ -39,7 +39,8 @@ What this build adds on top:
 * **A game select page** in front of Single Player — Quake, both mission packs
   and all four official episodes, drawn in the 2021 re-release's own menu font.
 * **A PC Options page** — supersampling, anti-aliasing, particle style (this is
-  the red blood switch), the door Z-fighting fix, and HUD height.
+  the red blood switch), the door Z-fighting fix, HUD height, and what the
+  desktop window does: a small mirror, full screen, or off.
 
 `PROGRESS.md` is the development log, and it is unusually complete: how the
 base commit was identified by hashing 212 engine files against upstream
@@ -62,11 +63,20 @@ VDXR is the running OpenXR runtime.
 ## Installing a release
 
 1. Download the release zip and extract it anywhere.
-2. Copy `pak0.pak` and `pak1.pak` from your Quake into `id1/`.
-3. Run **`Setup.bat`** once. It copies the expansions out of your Quake install
-   if it finds one, and builds the menu artwork and the episodes' message text
-   from your own game data.
-4. Run **`Quake VR.bat`**.
+2. Run **`Setup.bat`** once.
+3. Run **`Quake VR.bat`**.
+
+That is the whole thing if you own Quake on Steam or GOG. Setup finds your
+install and copies the game, every expansion it has and the soundtrack out of
+it, then builds the menu artwork and the MachineGames episodes' message text
+from your own data. Nothing is downloaded and nothing leaves your machine.
+
+It needs Python 3, and Pillow as well for the menu artwork - it will say so if
+either is missing, and the game still runs without them.
+
+If Setup cannot find Quake - installed somewhere unusual, or on another drive -
+set `QQ_QUAKEDIR` to the folder containing `id1` and run it again, or copy
+`pak0.pak` and `pak1.pak` into `id1/` by hand and run it again to do the rest.
 
 `Quake VR (flatscreen).bat` runs it in a window with no headset, which is handy
 for checking settings.

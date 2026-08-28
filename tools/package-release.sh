@@ -141,15 +141,9 @@ for t in setup.py make-qc-strings.py make-menu-art.py; do
 	fi
 done
 
-cat > "$DEST/Setup.bat" <<'EOF'
-@echo off
-rem Run this once, after copying pak0.pak and pak1.pak into the id1 folder.
-rem It adds any expansions it can find and builds the menu artwork and the
-rem message text for the MachineGames episodes from your own copy of Quake.
-cd /d "%~dp0"
-python tools\setup.py . || py tools\setup.py .
-pause
-EOF
+# Setup.bat is a real file in tools/, so the copy in a release and the copy
+# in a folder built here can never drift apart.
+cp "$SRC/tools/Setup.bat" "$DEST/"
 
 for py in python python3; do
 	if command -v $py >/dev/null 2>&1; then
