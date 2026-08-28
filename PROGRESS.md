@@ -1556,3 +1556,22 @@ reasonable the code looks.
 
 Verified flatscreen: no regression, the window renders normally with VR off,
 where the new call is skipped. The VR path needs a headset.
+
+## The mirror gets a mode, and the page gets a sixth item
+
+Asked for straight after the fix: a full screen mirror rather than the small
+window. `vr_mirror` is 0 off, 1 window, 2 full screen, and it is applied
+**live** in `VID_ApplyMirrorMode` - `SDL_SetWindowFullscreen` resizes the
+window and the new size goes into `vid_mirrorwidth`/`vid_mirrorheight` for the
+blit. Only the window changes: the eye buffers, the engine's idea of its own
+resolution and the OpenXR session are all untouched, which is why this needs no
+restart where supersampling and anti-aliasing do.
+
+The default is a window rather than full screen. There is no value of Team
+Beef's to defer to here - their build has no desktop window at all - so the
+choice is ours, and a mirror covering somebody's whole desktop while they are
+inside a headset is a thing to ask for rather than to be given.
+
+It is on the PC Options page as the sixth item, because a cvar that can only
+be typed into a console is not reachable from inside a headset. `menu_pcoptions`
+opens that page from the console, matching `menu_gameselect`.

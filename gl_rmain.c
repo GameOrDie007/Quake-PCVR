@@ -4247,9 +4247,11 @@ void GL_Main_Init(void)
 	{
 		extern cvar_t vr_supersampling;
 		extern cvar_t vr_msaa;
+		extern cvar_t vr_mirror;
 
 		Cvar_RegisterVariable(&vr_supersampling);
 		Cvar_RegisterVariable(&vr_msaa);
+		Cvar_RegisterVariable(&vr_mirror);
 	}
 	Cvar_RegisterVariable(&r_motionblur);
 	Cvar_RegisterVariable(&r_damageblur);

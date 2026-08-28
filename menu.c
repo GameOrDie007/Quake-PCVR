@@ -3448,7 +3448,7 @@ static void M_Menu_GameSelect_Key (int key, int ascii)
 	Tegra's Z-buffer - a mobile concession that costs correctness on PC.
 */
 
-#define PCOPTIONS_ITEMS 5
+#define PCOPTIONS_ITEMS 6
 
 static int pcoptions_cursor;
 
@@ -3457,6 +3457,7 @@ extern cvar_t vr_msaa;
 extern cvar_t cl_particles_quake;
 extern cvar_t r_polygonoffset_submodel_offset;
 extern cvar_t vr_hud_height;
+extern cvar_t vr_mirror;
 
 void M_Menu_PCOptions_f (void)
 {
@@ -3501,6 +3502,15 @@ static void M_Menu_PCOptions_Draw (void)
 
 	M_Options_PrintSlider(  "             HUD height", true, vr_hud_height.value, 0, 50);
 
+	// The window on the monitor while the headset is running. Not one of
+	// theirs - their build has no desktop window - so the default is ours.
+	if (vr_mirror.integer == 0)
+		M_Options_PrintCommand("       Desktop mirror:  Off", true);
+	else if (vr_mirror.integer >= 2)
+		M_Options_PrintCommand("       Desktop mirror:  Full screen", true);
+	else
+		M_Options_PrintCommand("       Desktop mirror:  Window", true);
+
 	M_Options_PrintCommand(" ", true);
 
 	// vid.width and vid.height are the eye buffer in VR, which is the figure
@@ -3544,6 +3554,8 @@ static void M_Menu_PCOptions_Key (int key, int ascii)
 			Cvar_SetValueQuick(&r_polygonoffset_submodel_offset, r_polygonoffset_submodel_offset.value != 0 ? 0 : 14);
 		else if (pcoptions_cursor == 4)
 			Cvar_SetValueQuick(&vr_hud_height, bound(0.0f, vr_hud_height.value - 2.5f, 50.0f));
+		else if (pcoptions_cursor == 5)
+			Cvar_SetValueQuick(&vr_mirror, (vr_mirror.integer + 2) % 3);
 		break;
 
 	case 'd':
@@ -3561,6 +3573,8 @@ static void M_Menu_PCOptions_Key (int key, int ascii)
 			Cvar_SetValueQuick(&r_polygonoffset_submodel_offset, r_polygonoffset_submodel_offset.value != 0 ? 0 : 14);
 		else if (pcoptions_cursor == 4)
 			Cvar_SetValueQuick(&vr_hud_height, bound(0.0f, vr_hud_height.value + 2.5f, 50.0f));
+		else if (pcoptions_cursor == 5)
+			Cvar_SetValueQuick(&vr_mirror, (vr_mirror.integer + 1) % 3);
 		break;
 	}
 }
@@ -5580,6 +5594,7 @@ static void M_Init (void)
 	Cmd_AddCommand ("menu_main", M_Menu_Main_f, "open the main menu");
 	Cmd_AddCommand ("menu_singleplayer", M_Menu_SinglePlayer_f, "open the singleplayer menu");
 	Cmd_AddCommand ("menu_gameselect", M_Menu_GameSelect_f, "open the game and expansion list");
+	Cmd_AddCommand ("menu_pcoptions", M_Menu_PCOptions_f, "open the PC options page");
 	Cmd_AddCommand ("menu_load", M_Menu_Load_f, "open the loadgame menu");
 	Cmd_AddCommand ("menu_save", M_Menu_Save_f, "open the savegame menu");
 	Cmd_AddCommand ("menu_multiplayer", M_Menu_MultiPlayer_f, "open the multiplayer menu");
