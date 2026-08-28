@@ -46,7 +46,7 @@ int vid_mirrorheight = 0;
 	Applied live, so it can be changed from the PC Options page without a
 	restart, unlike the eye buffer settings.
 */
-cvar_t vr_mirror = {CVAR_SAVE, "vr_mirror", "1", "the desktop window while in VR: 0 off, 1 window, 2 full screen"};
+cvar_t vr_mirror = {CVAR_SAVE, "vr_mirror", "2", "the desktop window while in VR: 0 off, 1 window, 2 borderless full screen"};
 
 #ifndef __IPHONEOS__
 #ifdef MACOSX
@@ -906,6 +906,19 @@ void Sys_SendKeyEvents( void )
 				break;
 			case SDL_KEYDOWN:
 			case SDL_KEYUP:
+				/*
+					Alt+Enter switches the mirror between a window and borderless
+					full screen, and is swallowed here so it never reaches the game -
+					Enter is bound to jump.
+				*/
+				if (VR_Enabled() && event.key.keysym.sym == SDLK_RETURN
+					&& (event.key.keysym.mod & KMOD_ALT))
+				{
+					if (event.key.state == SDL_PRESSED)
+						Cvar_SetValueQuick(&vr_mirror, vr_mirror.integer == 2 ? 1 : 2);
+					break;
+				}
+
 				keycode = MapKey(event.key.keysym.sym);
 				if (!VID_JoyBlockEmulatedKeys(keycode))
 					Key_Event(keycode, 0, (event.key.state == SDL_PRESSED));
@@ -938,6 +951,20 @@ void Sys_SendKeyEvents( void )
 					case SDL_WINDOWEVENT_MOVED:
 						break;
 					case SDL_WINDOWEVENT_RESIZED:
+						/*
+							In VR the window is only a mirror, and vid.width/height are
+							the eye buffer - which the engine sizes all of its 2D and
+							refdef maths against. Letting a window resize touch those
+							would resize the headset's view. Only the blit's target
+							changes.
+						*/
+						if (VR_Enabled())
+						{
+							vid_mirrorwidth = event.window.data1;
+							vid_mirrorheight = event.window.data2;
+							break;
+						}
+
 						if(vid_resizable.integer < 2)
 						{
 							vid.width = event.window.data1;
@@ -2188,7 +2215,9 @@ static qboolean VID_InitModeGL(viddef_mode_t *mode)
 		vid_mirrorwidth = max(320, (int)(mode->width * scale));
 		vid_mirrorheight = max(240, (int)(mode->height * scale));
 
-		window = SDL_CreateWindow(gamename, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, vid_mirrorwidth, vid_mirrorheight, windowflags);
+		// Resizable, so the mirror can be dragged about and maximised. Only the
+		// window changes size; the eye buffers never do.
+		window = SDL_CreateWindow(gamename, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, vid_mirrorwidth, vid_mirrorheight, windowflags | SDL_WINDOW_RESIZABLE);
 		if (window == NULL)
 		{
 			Con_Printf("Failed to create the VR mirror window %ix%i: %s\n", vid_mirrorwidth, vid_mirrorheight, SDL_GetError());
@@ -2439,6 +2468,30 @@ int VID_GetGamma (unsigned short *ramps, int rampsize)
 	resolution and the OpenXR session are all untouched, which is why this can
 	be changed while playing where supersampling and anti-aliasing cannot.
 */
+/*
+	Present the desktop window.
+
+	The engine swaps it once a frame from CL_EndUpdateScreen, which runs
+	before TBXR_submitFrame - so the mirror blit, which happens in
+	submitFrame, always landed in a buffer that had already been shown. That
+	is why the window was black.
+
+	Swapping again here, immediately after the blit, is the whole fix. The
+	engine's own swap still happens and shows the previous mirror rather than
+	anything blank, because nothing ever clears this buffer - the eyes render
+	into their own framebuffers, never into this one - so there is no flicker
+	between the two. vid_vsync is forced to 0 in VR, so neither swap blocks;
+	the headset is paced by xrWaitFrame.
+*/
+void VID_PresentMirror(void);
+void VID_PresentMirror(void)
+{
+#if SDL_MAJOR_VERSION != 1
+	if (window)
+		SDL_GL_SwapWindow(window);
+#endif
+}
+
 void VID_ApplyMirrorMode(void);
 void VID_ApplyMirrorMode(void)
 {

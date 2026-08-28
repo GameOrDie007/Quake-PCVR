@@ -80,6 +80,7 @@ extern cvar_t vr_mirror;
 // In vid_sdl.c, which owns the window. Applied here rather than during the
 // engine's screen update, so no SDL call lands inside a per-eye render.
 void VID_ApplyMirrorMode(void);
+void VID_PresentMirror(void);
 
 // GetFOV lives with the other engine-facing entry points in vr_pc.c, but the
 // value is produced here, as it is in their TBXR_Common.c.
@@ -1162,6 +1163,8 @@ void TBXR_prepareEyeBuffer(int eye)
 	TBXR_ClearFrameBuffer(frameBuffer->Width, frameBuffer->Height);
 }
 
+void TBXR_MirrorToWindow(ovrFramebuffer *frameBuffer);
+
 void TBXR_finishEyeBuffer(int eye)
 {
 	ovrFramebuffer *frameBuffer = &(gAppState.Renderer.FrameBuffer[eye]);
@@ -1174,6 +1177,25 @@ void TBXR_finishEyeBuffer(int eye)
 	qglColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
 	ovrFramebuffer_Resolve(frameBuffer);
+
+	/*
+		The desktop mirror, taken from the left eye once it has been resolved.
+
+		It has to be here, between the resolve and the release. Reading the
+		multisampled buffer instead is what kept the window black for the whole
+		life of the port: blitting out of a multisampled framebuffer must not
+		scale, and scaling a 4608x4896 eye into a 752x800 window is exactly
+		that, so the driver rejected it every frame with GL_INVALID_OPERATION
+		and drew nothing. The resolved buffer is not multisampled, so scaling
+		out of it is allowed. After the release the image belongs to the
+		runtime again and must not be read at all.
+
+		The engine swaps the window later, from CL_EndUpdateScreen, which is
+		after both eyes - so this needs no swap of its own.
+	*/
+	if (eye == 0 && vr_mirror.integer != 0)
+		TBXR_MirrorToWindow(frameBuffer);
+
 	ovrFramebuffer_Release(frameBuffer);
 	ovrFramebuffer_SetNone();
 }
@@ -1209,14 +1231,29 @@ static void TBXR_updateProjections(void)
 	cleared it before anyone saw it. The monitor stayed black for the whole
 	life of the port until somebody thought to mention it.
 */
-void TBXR_MirrorToWindow(void)
+void TBXR_MirrorToWindow(ovrFramebuffer *frameBuffer)
 {
-	ovrFramebuffer *frameBuffer = &gAppState.Renderer.FrameBuffer[0];
 
 	GLint olddraw = 0, oldread = 0;
+	static qboolean said = false;
+
+	// Once, so the log says where this stops when the window stays black.
+	if (!said)
+	{
+		said = true;
+		Con_DPrintf("VR mirror: window %ix%i, eye buffer %ix%i, resolved fbo %u, vr_mirror %i\n",
+				vid_mirrorwidth, vid_mirrorheight,
+				frameBuffer->Width, frameBuffer->Height,
+				(unsigned)frameBuffer->FrameBuffers[frameBuffer->TextureSwapChainIndex],
+				vr_mirror.integer);
+	}
 
 	if (vid_mirrorwidth <= 0 || vid_mirrorheight <= 0)
+	{
+		if (!said)
+			Con_DPrintf("VR mirror: no window size, nothing drawn\n");
 		return;
+	}
 
 	/*
 		Put every binding back exactly as it was found.
@@ -1234,11 +1271,48 @@ void TBXR_MirrorToWindow(void)
 	qglGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldread);
 
 	qglDisable(GL_FRAMEBUFFER_SRGB);
-	qglBindFramebuffer(GL_READ_FRAMEBUFFER, frameBuffer->MsaaFrameBuffer);
-	qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-	qglBlitFramebuffer(0, 0, frameBuffer->Width, frameBuffer->Height,
-			0, 0, vid_mirrorwidth, vid_mirrorheight,
-			GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	/*
+		Take the part of the eye that matches the window's shape, rather than
+		squashing the whole thing into it.
+
+		An eye buffer is nearly square - 4608x4896 here - because that is the
+		shape of the lens's field of view. Stretching that across a 16:9 monitor
+		makes everything short and wide. Cropping to the window's aspect instead
+		keeps the proportions honest and fills the screen; what it costs is the
+		top and bottom of the eye's view, which is the usual trade a VR mirror
+		makes and is why other headset mirrors look like an ordinary game.
+	*/
+	{
+		int sw = frameBuffer->Width;
+		int sh = frameBuffer->Height;
+		int cw = sw;
+		int ch = sh;
+		int sx, sy;
+
+		if (vid_mirrorwidth > 0 && vid_mirrorheight > 0)
+		{
+			// The largest rectangle of the window's shape that fits in the eye.
+			ch = (int)((double)sw * vid_mirrorheight / vid_mirrorwidth);
+			if (ch > sh)
+			{
+				ch = sh;
+				cw = (int)((double)sh * vid_mirrorwidth / vid_mirrorheight);
+			}
+		}
+
+		if (cw > sw) cw = sw;
+		if (ch > sh) ch = sh;
+		if (cw < 1) cw = 1;
+		if (ch < 1) ch = 1;
+
+		sx = (sw - cw) / 2;
+		sy = (sh - ch) / 2;
+		qglBindFramebuffer(GL_READ_FRAMEBUFFER, frameBuffer->FrameBuffers[frameBuffer->TextureSwapChainIndex]);
+		qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+		qglBlitFramebuffer(sx, sy, sx + cw, sy + ch,
+				0, 0, vid_mirrorwidth, vid_mirrorheight,
+				GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	}
 
 	qglBindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)oldread);
 	qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)olddraw);
@@ -1290,10 +1364,8 @@ void TBXR_submitFrame(void)
 		mirror a frame of latency and is the arrangement that is known to leave
 		the headset alone.
 	*/
+	// Only the window mode; the mirror itself is drawn as each eye resolves.
 	VID_ApplyMirrorMode();
-
-	if (vr_mirror.integer != 0)
-		TBXR_MirrorToWindow();
 
 	gAppState.LayerCount = 0;
 	memset(gAppState.Layers, 0, sizeof(xrCompositorLayer_Union) * ovrMaxLayerCount);
