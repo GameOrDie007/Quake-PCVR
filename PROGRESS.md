@@ -1604,3 +1604,50 @@ The mirror remains open. The one arrangement not yet tried is blitting in
 `submitFrame` as now and swapping the window there, which puts the mirror in
 front of a swap without touching the eye pass. That is a deliberate experiment
 for a session with the headset on, not something to slip into a release.
+
+## The mirror, finally, and why it took four attempts
+
+One line of instrumentation settled what three rounds of reasoning could not:
+
+```
+VR mirror: window 752x800, eye buffer 4608x4896, msaa fbo 4, vr_mirror 1
+VR mirror: GL error 0x502 after the blit
+```
+
+`0x502` is `GL_INVALID_OPERATION`. **Blitting out of a multisampled framebuffer
+may not scale** - source and destination rectangles have to be the same size -
+and this was scaling a 4608x4896 eye into a 752x800 window. The driver rejected
+it every frame and drew nothing. The mirror had never worked since the day it
+was written, and none of it had anything to do with ordering, swaps or where
+the call sat.
+
+Three attempts were spent moving that blit around: after the swap, before the
+swap, with its own swap. Every one of them was reasoning about *when* a call
+happened when the call itself was invalid. Two of those attempts broke the
+headset and cost testing rounds; the fourth attempt began by asking the driver
+what it thought, and took ten minutes.
+
+The fix is to read the **resolved** buffer, between `ovrFramebuffer_Resolve` and
+`ovrFramebuffer_Release` - the only window where it is both finished and still
+ours. Scaling out of it is legal, and the engine's own swap presents it.
+
+Then the shape: an eye buffer is nearly square, being the shape of the lens's
+field of view, so filling a 16:9 monitor with it looked short and wide. The
+mirror now takes the largest rectangle of the window's shape out of the middle
+of the eye - full width, about the middle half of the height on a widescreen
+monitor - which is the trade every VR mirror makes.
+
+The window is borderless full screen by default, Alt+Enter toggles it (swallowed
+before it reaches the game, since Enter is jump), and it is resizable. A resize
+moves only the mirror: `vid.width`/`vid.height` are the eye buffer, and letting
+a window resize touch those would resize what the headset sees.
+
+**Tried and dropped:** stabilising the crop against a lagging copy of the head
+angles, to make the mirror easier to watch on a stream. It cancelled the jitter
+and introduced a wobble on tilts, which is worse. Removed rather than shipped
+half-working.
+
+The lesson is the same one this file has recorded twice already, and it did not
+stick either time: **ask the machine before reasoning about the machine.** A
+`glGetError` after a suspect call is ten minutes; three theories about frame
+ordering is two evenings and a broken build.

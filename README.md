@@ -41,6 +41,9 @@ What this build adds on top:
 * **A PC Options page** — supersampling, anti-aliasing, particle style (this is
   the red blood switch), the door Z-fighting fix, HUD height, and what the
   desktop window does: a small mirror, full screen, or off.
+* **A desktop mirror worth streaming** — borderless full screen by default,
+  Alt+Enter to windowed and back, resizable, and cropped to the shape of the
+  window rather than squashed into it.
 
 `PROGRESS.md` is the development log, and it is unusually complete: how the
 base commit was identified by hashing 212 engine files against upstream
@@ -152,13 +155,6 @@ messages show their internal names; everything still runs.
 * **Black blood** is Team Beef's own behaviour, not a porting defect - verified
   three ways, including against their standalone on a Quest. It is left alone,
   and PC Options has a switch that turns blood back to classic Quake red.
-* **The desktop window is black while you play.** The game is in the headset
-  and nothing is wrong with it, but the monitor shows nothing. The mirror is
-  drawn every frame and then thrown away: the engine swaps the window once per
-  eye from inside the eye render, so the blit lands in a buffer that has
-  already been presented. Moving it earlier means blitting in the middle of an
-  eye pass, which breaks the headset outright. It needs solving properly rather
-  than guessing, so for now the window stays black.
 
 ## Licence
 
