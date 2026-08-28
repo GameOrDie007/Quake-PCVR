@@ -1519,3 +1519,40 @@ The 16 that can be seen are minor and read acceptably: the hub's difficulty
 buttons ("Button easy"), a few mg3 boss and map lines, and four horde-mode
 lines in mg1. **Every ending is real text** — mg1's five episode endtexts and
 its finale, Dimension of the Past's finale, and mg3's map8 intermission.
+
+---
+
+# The desktop window was black the whole time
+
+Noticed after the repository went up, while the release was still a draft.
+Playing in the headset, the window on the monitor showed nothing.
+
+The mirror exists and is called every frame — `TBXR_MirrorToWindow` blits the
+left eye's framebuffer into the default framebuffer. The fault is *when*:
+
+```
+eye loop  →  QC_EndFrame()  →  Host_EndFrame  →  CL_EndUpdateScreen
+                                              →  VID_Finish  →  SDL_GL_SwapWindow
+          →  TBXR_submitFrame()  →  TBXR_MirrorToWindow()
+```
+
+`submitFrame` runs **after** `QC_EndFrame`, and `QC_EndFrame` is what reaches
+the swap. So the blit wrote into a back buffer that had already been presented,
+and the next frame cleared it before anyone saw it. Every frame drew the mirror
+correctly and every frame threw it away.
+
+The blit now happens in `VID_Finish`, immediately before `SDL_GL_SwapWindow`,
+which is the only place that is right regardless of what else the frame did.
+`TBXR_MirrorToWindow` is no longer static and `vid_sdl.c` declares it locally
+rather than pulling in the OpenXR headers, the same way it already handles the
+other VR entry points.
+
+Worth noting how long this survived: the mirror was written early, believed to
+work, and then used as the basis for a suggestion — "the desktop window mirrors
+your left eye, so the text is on your monitor too" — offered while chasing the
+notify-area bug. That suggestion was never taken up, so the claim was never
+tested. **A feature nobody has looked at is not a working feature**, however
+reasonable the code looks.
+
+Verified flatscreen: no regression, the window renders normally with VR off,
+where the new call is skipped. The VR path needs a headset.
