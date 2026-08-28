@@ -200,6 +200,7 @@ void TBXR_FrameSetup(void);
 void TBXR_prepareEyeBuffer(int eye);
 void TBXR_finishEyeBuffer(int eye);
 void TBXR_submitFrame(void);
+void TBXR_MirrorToWindow(void);
 
 // Their TBXR_Common.h wraps every call in this, so vr_input.c expects it.
 void TBXR_CheckErrors(XrResult result, const char *function);

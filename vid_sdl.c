@@ -2458,6 +2458,18 @@ void VID_Finish (void)
 	}
 }
 #endif
+			/*
+				The desktop mirror has to be the last thing written to the back
+				buffer before it is presented. Declared here rather than included,
+				so this file need not pull in the OpenXR headers.
+			*/
+			{
+				extern void TBXR_MirrorToWindow(void);
+
+				if (VR_Enabled())
+					TBXR_MirrorToWindow();
+			}
+
 #if SDL_MAJOR_VERSION == 1
 			SDL_GL_SwapBuffers();
 #else

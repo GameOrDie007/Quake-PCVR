@@ -1197,8 +1197,15 @@ static void TBXR_updateProjections(void)
 	their side. It exists because a PC game that shows nothing on the monitor
 	is unpleasant to run, and because it is the only way to see what the
 	headset sees while debugging.
+
+	Called from VID_Finish immediately before the window is swapped, not from
+	submitFrame where it used to be. submitFrame runs after QC_EndFrame, and
+	QC_EndFrame is what reaches SDL_GL_SwapWindow - so blitting there wrote
+	into a back buffer that had already been presented, and the next frame
+	cleared it before anyone saw it. The monitor stayed black for the whole
+	life of the port until somebody thought to mention it.
 */
-static void TBXR_MirrorToWindow(void)
+void TBXR_MirrorToWindow(void)
 {
 	ovrFramebuffer *frameBuffer = &gAppState.Renderer.FrameBuffer[0];
 
@@ -1250,8 +1257,6 @@ void TBXR_submitFrame(void)
 		XrPosef xfHeadFromEye = gAppState.Projections[eye].pose;
 		stageFromEye[eye] = XrPosef_Multiply(gAppState.xfStageFromHead, xfHeadFromEye);
 	}
-
-	TBXR_MirrorToWindow();
 
 	gAppState.LayerCount = 0;
 	memset(gAppState.Layers, 0, sizeof(xrCompositorLayer_Union) * ovrMaxLayerCount);
