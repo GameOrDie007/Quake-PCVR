@@ -1209,8 +1209,25 @@ void TBXR_MirrorToWindow(void)
 {
 	ovrFramebuffer *frameBuffer = &gAppState.Renderer.FrameBuffer[0];
 
+	GLint olddraw = 0, oldread = 0;
+
 	if (vid_mirrorwidth <= 0 || vid_mirrorheight <= 0)
 		return;
+
+	/*
+		Put every binding back exactly as it was found.
+
+		This runs from VID_Finish, and VID_Finish is reached from inside the
+		per-eye render - the engine updates and swaps the window once for each
+		eye. So an eye's framebuffer is bound when this is called, and leaving
+		the window bound instead sent the rest of that eye's drawing to the
+		window: a corner of the image on the monitor and nothing at all in the
+		headset. DarkPlaces also caches the binding it believes is current, so
+		restoring what was actually there keeps the driver and that cache
+		agreeing.
+	*/
+	qglGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &olddraw);
+	qglGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldread);
 
 	qglDisable(GL_FRAMEBUFFER_SRGB);
 	qglBindFramebuffer(GL_READ_FRAMEBUFFER, frameBuffer->MsaaFrameBuffer);
@@ -1218,8 +1235,9 @@ void TBXR_MirrorToWindow(void)
 	qglBlitFramebuffer(0, 0, frameBuffer->Width, frameBuffer->Height,
 			0, 0, vid_mirrorwidth, vid_mirrorheight,
 			GL_COLOR_BUFFER_BIT, GL_LINEAR);
-	qglBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-	qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
+	qglBindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)oldread);
+	qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)olddraw);
 }
 
 void TBXR_submitFrame(void)

@@ -2448,8 +2448,29 @@ static void VID_ApplyMirrorMode(void)
 		return;
 
 #if SDL_MAJOR_VERSION != 1
-	SDL_SetWindowFullscreen(window, want == 2 ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
-	SDL_GetWindowSize(window, &vid_mirrorwidth, &vid_mirrorheight);
+	{
+		qboolean isfull = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0;
+		qboolean wantfull = (want == 2);
+
+		/*
+			Only touched when it genuinely has to change.
+
+			SDL_SetWindowFullscreen runs its display mode handling even when the
+			window is already in the state being asked for, and on Windows that
+			can restore the desktop mode - which shoves every other window onto
+			another monitor. Calling it once at startup to set the mode it was
+			already in was enough to do that.
+
+			Full screen is the desktop kind rather than a real mode change, for
+			the same reason: the monitor is only ever showing a mirror of what is
+			in the headset, and it has no business rearranging the desktop.
+		*/
+		if (isfull != wantfull)
+		{
+			SDL_SetWindowFullscreen(window, wantfull ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+			SDL_GetWindowSize(window, &vid_mirrorwidth, &vid_mirrorheight);
+		}
+	}
 #endif
 
 	applied = want;
