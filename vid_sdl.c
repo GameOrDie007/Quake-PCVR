@@ -36,6 +36,18 @@ extern int vr_eyeheight;
 int vid_mirrorwidth = 0;
 int vid_mirrorheight = 0;
 
+/*
+	What the desktop window does while the headset is running. Not theirs -
+	their build has no desktop window at all - so there is no value of Team
+	Beef's to default to. A small window is the default because the game is
+	being played in the headset, and a full screen mirror covering the desktop
+	is a thing to ask for rather than to be given.
+
+	Applied live, so it can be changed from the PC Options page without a
+	restart, unlike the eye buffer settings.
+*/
+cvar_t vr_mirror = {CVAR_SAVE, "vr_mirror", "1", "the desktop window while in VR: 0 off, 1 window, 2 full screen"};
+
 #ifndef __IPHONEOS__
 #ifdef MACOSX
 #include <Carbon/Carbon.h>
@@ -2418,6 +2430,31 @@ int VID_GetGamma (unsigned short *ramps, int rampsize)
 #endif
 }
 
+/*
+	Put the desktop window into the mode vr_mirror asks for, if it is not
+	already in it. SDL does the resizing; the blit needs the resulting size,
+	which is what vid_mirrorwidth and vid_mirrorheight carry.
+
+	Only the window changes. The eye buffers, the engine's idea of its own
+	resolution and the OpenXR session are all untouched, which is why this can
+	be changed while playing where supersampling and anti-aliasing cannot.
+*/
+static void VID_ApplyMirrorMode(void)
+{
+	static int applied = -1;
+	int want = bound(0, vr_mirror.integer, 2);
+
+	if (want == applied || !window)
+		return;
+
+#if SDL_MAJOR_VERSION != 1
+	SDL_SetWindowFullscreen(window, want == 2 ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+	SDL_GetWindowSize(window, &vid_mirrorwidth, &vid_mirrorheight);
+#endif
+
+	applied = want;
+}
+
 void VID_Finish (void)
 {
 #if SDL_MAJOR_VERSION == 1
@@ -2467,7 +2504,19 @@ void VID_Finish (void)
 				extern void TBXR_MirrorToWindow(void);
 
 				if (VR_Enabled())
-					TBXR_MirrorToWindow();
+				{
+					VID_ApplyMirrorMode();
+
+					if (vr_mirror.integer != 0)
+						TBXR_MirrorToWindow();
+					else
+					{
+						// Otherwise the window keeps whatever frame it last had.
+						qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+						qglClearColor(0, 0, 0, 1);
+						qglClear(GL_COLOR_BUFFER_BIT);
+					}
+				}
 			}
 
 #if SDL_MAJOR_VERSION == 1
