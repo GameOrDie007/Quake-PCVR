@@ -1,0 +1,145 @@
+# Quake VR for PC
+
+Team Beef's **QuakeQuest** — the standalone VR Quake for Quest headsets — ported
+to PCVR over OpenXR.
+
+This is not a new VR mod. It is Simon Brown's VR work, brought across to a
+desktop PC from the exact DarkPlaces commit his Android build forked, with
+nothing changed except what PC requires. If you have played QuakeQuest on a
+Quest, this plays identically, at whatever resolution your PC can drive.
+
+Developed and tested on a Quest 3 over Virtual Desktop (VDXR) at 3993x4243 per
+eye, 72Hz.
+
+## Credit
+
+* **[Team Beef](https://www.teambeef.org/) / Simon Brown** — all of the VR
+  work. The OpenXR session, the input, the weapon handling, the weapon wheel,
+  the big-screen menus, the haptics, the movement, the comfort options. Eight
+  source files here carry his copyright, and several came across untouched.
+* **DarkPlaces / LordHavoc and the Xonotic project** — the engine, at commit
+  `a2210a95` (July 2013), which is the base QuakeQuest forked.
+* **id Software** — Quake.
+
+This repository is the full DarkPlaces history with the port on top, so
+`git diff a2210a95..vr-1to1` shows precisely what was changed and nothing is
+taken on trust.
+
+## Two builds
+
+| branch | what it is |
+|---|---|
+| `vr-1to1` | QuakeQuest on PC. Nothing added. Five defects of theirs are reproduced deliberately, black blood included. |
+| `vr-pc` | The above plus PC-only additions, every one of them defaulting to Team Beef's value so an untouched install behaves identically. |
+
+What `vr-pc` adds:
+
+* **A game select page** in front of Single Player — Quake, both mission packs
+  and all four official episodes, drawn in the 2021 re-release's own menu font.
+* **A PC Options page** — supersampling, anti-aliasing, particle style (this is
+  the red blood switch), the door Z-fighting fix, and HUD height.
+
+## What you need
+
+* **Windows**, 64-bit.
+* **A PC VR headset with an OpenXR runtime.** Developed against Virtual Desktop
+  (VDXR) on a Quest 3. SteamVR and the Oculus runtime expose OpenXR too and
+  should work, but are untested — reports welcome.
+* **Your own Quake game data.** None is included here and none ever will be.
+  The 2021 re-release on Steam or GOG is the easy option: it contains Quake,
+  both mission packs and all four official episodes.
+
+Start Virtual Desktop and connect it to the PC **before** launching, so that
+VDXR is the running OpenXR runtime.
+
+## Installing a release
+
+1. Download the release zip and extract it anywhere.
+2. Copy `pak0.pak` and `pak1.pak` from your Quake into `id1/`.
+3. Run **`Setup.bat`** once. It copies the expansions out of your Quake install
+   if it finds one, and builds the menu artwork and the episodes' message text
+   from your own game data.
+4. Run **`Quake VR.bat`**.
+
+`Quake VR (flatscreen).bat` runs it in a window with no headset, which is handy
+for checking settings.
+
+The folder is self-contained: config, saved games and screenshots are all
+written inside it, so backing it up backs up everything, and copying it to
+another PC carries your settings with it.
+
+## The expansions
+
+`Setup.bat` looks for a Quake install and, if it finds one, adds whatever it
+has:
+
+| launcher | game |
+|---|---|
+| Scourge of Armagon | mission pack 1 |
+| Dissolution of Eternity | mission pack 2 |
+| Dimension of the Past | the 2016 MachineGames episode |
+| Dimension of the Machine | the 2021 MachineGames episode |
+| Dawn of the Machine | the 2026 MachineGames episode |
+
+All of them are reachable in the headset from Single Player, without going back
+to the desktop. Set `QQ_QUAKEDIR` if your Quake is somewhere unusual.
+
+The three MachineGames episodes run on the re-release's QuakeC, which expects
+its own engine in several places. Making them work took four engine fixes —
+see `PROGRESS.md` if you are curious, it is the most interesting part of the
+port.
+
+## Building from source
+
+MSYS2, with the mingw64 toolchain:
+
+```
+pacman -S --needed mingw-w64-x86_64-gcc make \
+                   mingw-w64-x86_64-SDL2 \
+                   mingw-w64-x86_64-openxr-sdk \
+                   mingw-w64-x86_64-libvorbis \
+                   mingw-w64-x86_64-libogg \
+                   mingw-w64-x86_64-curl
+```
+
+Then, from the repository root:
+
+```
+tools/build-mingw.sh
+```
+
+That produces `darkplaces-sdl.exe` and copies the runtime DLLs beside it. The
+script re-executes itself under MSYS2's own bash, which is not optional — see
+the comment at the top of it for why.
+
+To build a playable folder from your own game data:
+
+```
+tools/package-release.sh "C:/Games/Quake VR"
+```
+
+Python 3 is needed for the message text, and Pillow as well for the menu
+artwork. Without either, the menu falls back to plain text and the episodes'
+messages show their internal names; everything still runs.
+
+## Known issues
+
+* **The in-game Mods browser drops out of VR.** Changing gamedir ends in
+  `vid_restart`, which destroys the GL context the OpenXR swapchain images
+  belong to, and nothing restarts the session. Use the Single Player game list
+  instead — it relaunches the process, which is why it works.
+* **Sixteen messages in the MachineGames episodes** show a readable placeholder
+  rather than their real wording. Their text exists only inside the re-release's
+  own engine, in neither the paks nor its data files. Everything else, including
+  every ending, is the real text.
+* **Black blood** in the `vr-1to1` build is Team Beef's own behaviour, verified
+  against their standalone, and is left alone. The `vr-pc` build has a switch.
+
+## Licence
+
+GPL v2, the same as DarkPlaces and QuakeQuest — see `COPYING`. If you
+distribute a build, you must pass this source on with it.
+
+No game data is included in this repository and none may be added to it. The
+menu artwork and the episodes' message text are generated on your machine from
+your own copy of Quake, which is why they are not here.

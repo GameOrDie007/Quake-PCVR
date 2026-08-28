@@ -1,18 +1,26 @@
 #!/bin/sh
 #
-# Build a self-contained, playable install.
+# Build a self-contained, playable install from the game data on this machine.
 #
-#   tools/package-release.sh "E:/Games/Quake VR (1to1)"
+#   tools/package-release.sh "C:/Games/Quake VR"
 #
-# The folder holds the binary, everything it loads at run time, their shipped
-# config and weapon wheel, and the owner's game data. Config, saves and
+# The folder holds the binary, everything it loads at run time, Team Beef's
+# shipped config and weapon wheel, and your game data. Config, saves and
 # screenshots are written inside it, so backing the folder up backs up
 # everything and copying it to another PC carries the settings.
 #
+# Environment:
+#   QQ_QUAKEDIR      where Quake is installed
+#   QQ_GAMEDATA      where the base game data comes from, if not QQ_QUAKEDIR
+#                    (a Quest-side QuakeQuest folder, say, which also carries
+#                    the soundtrack and saves)
+#   QQ_NOEXPANSIONS  set to skip the expansions, saving about a gigabyte
+#
 set -e
 
-DEST=${1:-"E:/Games/Quake VR (1to1)"}
-DATA=${QQ_GAMEDATA:-"E:/Games/Quest Ports/QuakeQuest"}
+DEST=${1:-"./Quake VR"}
+QUAKEDIR=${QQ_QUAKEDIR:-"C:/Program Files (x86)/Steam/steamapps/common/Quake"}
+DATA=${QQ_GAMEDATA:-"$QUAKEDIR"}
 
 cd "$(dirname "$0")/.."
 SRC=$(pwd)
@@ -115,82 +123,60 @@ cd /d "%~dp0"
 start "" "%~dp0darkplaces-sdl.exe" -basedir . -nohome -game dopa %*
 EOF
 
-# Official expansions, if a Quake install can be found.
+# Expansions, the menu artwork and the episodes' message text. All three are
+# built from the game data on this machine, and tools/setup.py is the single
+# implementation of that - the same script a downloaded release runs through
+# its Setup.bat, so a folder built here and one built by a player come out
+# the same.
 #
-# All four were tested against this engine and all four load and render:
-# Scourge of Armagon and Dissolution of Eternity are classic BSP29, while
-# Dimension of the Machine (mg1) and Dawn of the Machine (mg3) are
-# mostly BSP2 - a format upstream DarkPlaces added in February 2013, five
-# months before the commit Team Beef forked, so this engine reads it.
-#
-# hipnotic and rogue come from the classic folders because -hipnotic and
-# -rogue are what DarkPlaces was written against, and they are far smaller.
-# mg1 and mg3 exist only in rerelease/. Both were verified to work against the
-# classic id1 paks, so there is no need for the rerelease base data.
-#
-# Set QQ_QUAKEDIR to override, or QQ_NOEXPANSIONS=1 to skip (saves ~1GB).
-QUAKEDIR=${QQ_QUAKEDIR:-"C:/Program Files (x86)/Steam/steamapps/common/Quake"}
-
-add_expansion() {
-	src="$1"; dir="$2"; label="$3"; args="$4"
-
-	if [ ! -f "$src" ]; then return; fi
-
-	mkdir -p "$DEST/$dir"
-	if [ ! -f "$DEST/$dir/pak0.pak" ]; then
-		echo "  $label..."
-		cp "$src" "$DEST/$dir/pak0.pak"
+# None of what it produces may be redistributed: the artwork is drawn with
+# the re-release's font and the message text is id Software's and
+# MachineGames' writing. Both are why a release ships this script rather
+# than its output.
+mkdir -p "$DEST/tools"
+# make-menu-art.py only exists on the branch that has a menu to draw.
+for t in setup.py make-qc-strings.py make-menu-art.py; do
+	if [ -f "$SRC/tools/$t" ]; then
+		cp "$SRC/tools/$t" "$DEST/tools/"
 	fi
+done
 
-	cat > "$DEST/$label.bat" <<EOF
+cat > "$DEST/Setup.bat" <<'EOF'
 @echo off
-rem Start Virtual Desktop on the headset and connect it FIRST.
+rem Run this once, after copying pak0.pak and pak1.pak into the id1 folder.
+rem It adds any expansions it can find and builds the menu artwork and the
+rem message text for the MachineGames episodes from your own copy of Quake.
 cd /d "%~dp0"
-start "" "%~dp0darkplaces-sdl.exe" -basedir . -nohome $args %*
+python tools\setup.py . || py tools\setup.py .
+pause
 EOF
-}
 
-if [ -z "$QQ_NOEXPANSIONS" ] && [ -d "$QUAKEDIR" ]; then
-	echo "Expansions..."
-	add_expansion "$QUAKEDIR/hipnotic/pak0.pak" hipnotic \
-		"Scourge of Armagon" "-hipnotic"
-	add_expansion "$QUAKEDIR/rogue/pak0.pak" rogue \
-		"Dissolution of Eternity" "-rogue"
-	add_expansion "$QUAKEDIR/rerelease/mg1/pak0.pak" mg1 \
-		"Dimension of the Machine" "-game mg1"
-	add_expansion "$QUAKEDIR/rerelease/mg3/pak0.pak" mg3 \
-		"Dawn of the Machine" "-game mg3"
-fi
-
-# The game select page's entries, drawn in the re-release's own menu font.
-# Quake's ornate lettering is pictures rather than a font, so arbitrary names
-# cannot be written in it; the re-release has that same alphabet as a real
-# font, and this renders the six names from the owner's own copy of it.
-# Skipped silently without python, PIL or a re-release install, in which case
-# the menu falls back to drawing the names as text.
-echo "Menu artwork..."
 for py in python python3; do
 	if command -v $py >/dev/null 2>&1; then
-		$py "$SRC/tools/make-menu-art.py" "$DEST" "$QUAKEDIR" || true
+		$py "$SRC/tools/setup.py" "$DEST" "$QQ_QUAKEDIR" || true
 		break
 	fi
 done
 
-# The re-release episodes' message text. Their QuakeC replaced every
-# player-facing string with a localisation token their own engine resolves
-# internally, and that table is not in the game data - so this rebuilds it
-# from classic Quake's own progs.dat, where the original wording still is.
-# Without it the engine prints the tokens, which is still better than the
-# silence they produced before ex_centerprint was implemented at all.
-if [ -d "$DEST/dopa" ] || [ -d "$DEST/mg1" ] || [ -d "$DEST/mg3" ]; then
-	echo "Episode message text..."
-	for py in python python3; do
-		if command -v $py >/dev/null 2>&1; then
-			$py "$SRC/tools/make-qc-strings.py" "$DEST" || true
-			break
-		fi
-	done
-fi
+# The licence this is under, and what the bundled libraries are under.
+cp "$SRC/COPYING" "$DEST/LICENSE.txt"
+cat > "$DEST/THIRD-PARTY.txt" <<'EOF'
+This build is GPL v2 - see LICENSE.txt - and is a port of Team Beef's
+QuakeQuest, itself built on DarkPlaces. Source, including everything
+changed for PC, is at the repository this was released from.
+
+The DLLs beside the executable are redistributed unmodified:
+
+  SDL2                  zlib licence      https://libsdl.org
+  OpenXR loader         Apache 2.0        https://khronos.org/openxr
+  libogg, libvorbis     BSD 3-clause      https://xiph.org
+  libgcc, libstdc++     GPL 3 + runtime exception
+  libwinpthread         MIT/BSD           https://mingw-w64.org
+
+No game data is included. Quake and its expansions are id Software's, and
+the artwork and message text Setup.bat produces are built from your own
+copy of them on your own machine.
+EOF
 
 # A short note on what this folder is, next to the launchers.
 cat > "$DEST/README.txt" <<'EOF'
