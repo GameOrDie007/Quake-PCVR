@@ -3177,6 +3177,187 @@ static void VM_SV_frameduration(prvm_prog_t *prog)
 }
 
 
+/*
+================================================================================
+
+	The re-release episodes' notifications
+
+	Dimension of the Past, Dimension of the Machine and Dawn of the Machine run
+	on the 2021 re-release's QuakeC, which routes every player-facing message
+	through ex_centerprint, ex_sprint and ex_bprint rather than the builtins.
+	Those three are declared in their defs.qc with **empty bodies** - their
+	engine recognises them by name and implements them itself. Compiled against
+	any other engine they are functions that return immediately, so every "You
+	need the gold key", every secret notification and every hub hint silently
+	does nothing. Nothing is wrong at the other end: the trigger fires, the
+	secret counter goes up, and no message is ever sent.
+
+	These three builtins are what their engine would have provided, and
+	sv_main.c points the stubs at them when the progs are loaded.
+
+	The text is a second half of the same problem. Their QuakeC replaced every
+	message with a localisation token - "$qc_need_gold_key" where the original
+	had "You need the gold key" - resolved against a table their engine keeps
+	internally and which is not in the game data. tools/make-qc-strings.py
+	rebuilds it from classic Quake's own progs.dat, where the original text
+	still is, and writes qc_strings.txt beside the paks. Without that file the
+	tokens print as they are, which is still better than nothing.
+
+================================================================================
+*/
+
+typedef struct qcstring_s
+{
+	const char *token;
+	const char *text;
+}
+qcstring_t;
+
+static qcstring_t *sv_qcstrings;
+static int sv_numqcstrings;
+static char *sv_qcstringdata;
+
+void SV_LoadQCStrings(void);
+void SV_LoadQCStrings(void)
+{
+	fs_offset_t size;
+	unsigned char *file;
+	char *p, *end;
+	int count, i;
+
+	if (sv_qcstringdata)
+		Mem_Free(sv_qcstringdata);
+	if (sv_qcstrings)
+		Mem_Free(sv_qcstrings);
+	sv_qcstringdata = NULL;
+	sv_qcstrings = NULL;
+	sv_numqcstrings = 0;
+
+	file = FS_LoadFile("qc_strings.txt", tempmempool, true, &size);
+	if (!file)
+		return;
+
+	sv_qcstringdata = (char *)Mem_Alloc(zonemempool, (size_t)size + 1);
+	memcpy(sv_qcstringdata, file, (size_t)size);
+	sv_qcstringdata[size] = 0;
+	Mem_Free(file);
+
+	// One line per entry, "token<tab>text", // for a comment. Counted first so
+	// the table is one allocation.
+	count = 0;
+	for (p = sv_qcstringdata; *p; p++)
+		if (*p == '\n')
+			count++;
+	count++;
+
+	sv_qcstrings = (qcstring_t *)Mem_Alloc(zonemempool, sizeof(qcstring_t) * count);
+
+	p = sv_qcstringdata;
+	while (*p)
+	{
+		char *tab;
+
+		end = strchr(p, '\n');
+		if (end)
+			*end = 0;
+
+		// strip a trailing carriage return, whatever wrote the file
+		i = (int)strlen(p);
+		if (i > 0 && p[i-1] == '\r')
+			p[i-1] = 0;
+
+		tab = strchr(p, '\t');
+		if (p[0] == '$' && tab && sv_numqcstrings < count)
+		{
+			*tab = 0;
+			sv_qcstrings[sv_numqcstrings].token = p;
+			sv_qcstrings[sv_numqcstrings].text = tab + 1;
+			sv_numqcstrings++;
+		}
+
+		if (!end)
+			break;
+		p = end + 1;
+	}
+
+	Con_DPrintf("loaded %i message strings for the re-release episodes\n", sv_numqcstrings);
+}
+
+// Anything not beginning with $ is ordinary text and passes straight through,
+// which is every message in Quake itself and both mission packs.
+static const char *SV_QCString(const char *s)
+{
+	int i;
+
+	if (!s || s[0] != '$')
+		return s;
+
+	for (i = 0; i < sv_numqcstrings; i++)
+		if (!strcmp(sv_qcstrings[i].token, s))
+			return sv_qcstrings[i].text;
+
+	return s;
+}
+
+static void VM_SV_ex_centerprint(prvm_prog_t *prog)
+{
+	client_t *client;
+	int entnum;
+	char string[VM_STRINGTEMP_LENGTH];
+
+	VM_SAFEPARMCOUNTRANGE(2, 8, VM_SV_ex_centerprint);
+
+	entnum = PRVM_G_EDICTNUM(OFS_PARM0);
+	if (entnum < 1 || entnum > svs.maxclients || !svs.clients[entnum-1].active)
+		return;
+
+	client = svs.clients + entnum-1;
+	if (!client->netconnection)
+		return;
+
+	VM_VarString(prog, 1, string, sizeof(string));
+	MSG_WriteChar(&client->netconnection->message, svc_centerprint);
+	MSG_WriteString(&client->netconnection->message, SV_QCString(string));
+}
+
+static void VM_SV_ex_sprint(prvm_prog_t *prog)
+{
+	client_t *client;
+	int entnum;
+	char string[VM_STRINGTEMP_LENGTH];
+
+	VM_SAFEPARMCOUNTRANGE(2, 8, VM_SV_ex_sprint);
+
+	VM_VarString(prog, 1, string, sizeof(string));
+
+	entnum = PRVM_G_EDICTNUM(OFS_PARM0);
+	if (entnum == 0)
+	{
+		Con_Print(SV_QCString(string));
+		return;
+	}
+
+	if (entnum < 1 || entnum > svs.maxclients || !svs.clients[entnum-1].active)
+		return;
+
+	client = svs.clients + entnum-1;
+	if (!client->netconnection)
+		return;
+
+	MSG_WriteChar(&client->netconnection->message, svc_print);
+	MSG_WriteString(&client->netconnection->message, SV_QCString(string));
+}
+
+static void VM_SV_ex_bprint(prvm_prog_t *prog)
+{
+	char string[VM_STRINGTEMP_LENGTH];
+
+	VM_SAFEPARMCOUNTRANGE(1, 8, VM_SV_ex_bprint);
+
+	VM_VarString(prog, 0, string, sizeof(string));
+	SV_BroadcastPrint(SV_QCString(string));
+}
+
 prvm_builtin_t vm_sv_builtins[] = {
 NULL,							// #0 NULL function (not callable) (QUAKE)
 VM_makevectors,					// #1 void(vector ang) makevectors (QUAKE)
@@ -3823,6 +4004,9 @@ NULL,							// #637
 NULL,							// #638
 VM_digest_hex,						// #639
 NULL,							// #640
+VM_SV_ex_centerprint,					// #641 the re-release's ex_centerprint
+VM_SV_ex_sprint,					// #642 the re-release's ex_sprint
+VM_SV_ex_bprint,					// #643 the re-release's ex_bprint
 };
 
 const int vm_sv_numbuiltins = sizeof(vm_sv_builtins) / sizeof(prvm_builtin_t);

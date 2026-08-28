@@ -1338,3 +1338,87 @@ waterlevel 3 both explain it without a bug. Not reproduced, not confirmed.
 
 **The five defects of theirs reproduced deliberately** stand, black blood
 included — see above.
+
+---
+
+# The episodes' notifications: nothing was ever being sent
+
+He noticed that Dawn of the Machine never tells you a door needs a key, where
+Quake puts "You need the silver key" in the middle of the screen. It is the
+same shape as the achievement bug — their QuakeC expecting an engine that is
+not this one — and it silences **every** message in all three re-release
+episodes.
+
+## Found by elimination, then confirmed
+
+Working down rather than guessing:
+
+- **Not a missing builtin.** Their progs reference 63 builtins, all standard
+  plus `checkextension`.
+- **Not a broken trigger.** Teleporting the player into one of map1's
+  `trigger_secret` volumes takes the counter from `SECRETS: 0 / 6` to `1 / 6`,
+  with nothing on screen.
+- **Nothing is sent.** With `cl_shownet 2` the secret produces
+  `svc_foundsecret` and an achievement message — and **no `svc_centerprint`
+  at all**.
+- **The reason, from their bytecode.** `door_touch` calls a function named
+  `ex_centerprint`, and in the function table `ex_centerprint` has
+  `first_statement 0` — statement 0 being the reserved `DONE` every progs.dat
+  begins with. **It is an empty stub.** Their engine recognises it by name and
+  implements it internally; on any other engine it returns immediately.
+
+Sweeping the function tables for empty stubs found the family: `ex_centerprint`,
+`ex_sprint`, `ex_bprint`, plus `ex_draw_*` debug drawing and `ex_bot_*`
+navigation which no single player game needs. dopa, mg1 and mg3 all have them;
+Quake and both mission packs have none.
+
+## Two halves, because the text is tokenised too
+
+**The functions.** Three builtins at #641-643 in `svvm_cmds.c` do what their
+engine would have, and `SV_VM_Setup` points the stubs at them after the progs
+load. The guard is `first_statement == 0`: a real function starts later than
+statement 0 and a builtin is already negative, so this can only ever touch an
+empty stub. Quake's own progs, both mission packs and any mod that implements
+these itself are untouched.
+
+**The words.** Their QuakeC also replaced every message with a localisation
+token — `$qc_need_gold_key` where the original had "You need the gold key" —
+resolved against a table their engine keeps internally. It is not in the game
+data: not in the paks, not in `QuakeEX.kpf`, not in their executable.
+
+But their QuakeC *is* the original with the strings swapped, so the original
+wording is still sitting in id1's own `progs.dat`, and a token's words appear
+verbatim in the string it replaced. `tools/make-qc-strings.py` matches them up
+and writes `qc_strings.txt` beside the paks, built from the owner's own install
+into his own install, like the paks and the menu artwork. 187 tokens, 37 of
+them matched to classic Quake text — which is every message that has a classic
+equivalent, the key and secret lines among them. The rest are the episodes'
+own new messages, hub hints and the like, and fall back to their token spelled
+out, which at least shows that something was said.
+
+If the file is missing the engine prints the raw token, which is still better
+than the silence.
+
+## Verified
+
+Teleporting into the same `trigger_secret` that produced nothing now puts
+**"You found a secret area!"** across the middle of the screen, in Quake's own
+wording. The startup log shows the three stubs being bound and the table
+loading:
+
+```
+loaded 187 message strings for the re-release episodes
+ex_centerprint implemented as builtin #641
+ex_sprint implemented as builtin #642
+ex_bprint implemented as builtin #643
+```
+
+The key-door path was not staged directly — placing a player hard against a
+locked door does not reliably fire `door_touch` — but all three links are
+confirmed separately: `door_touch` calls `ex_centerprint` with
+`$qc_need_gold_key`, `ex_centerprint` now centerprints, and that token maps to
+"You need the gold key" in the loaded table.
+
+**On both branches.** The episodes are ours to ship, so making their messages
+work is not a change to Team Beef's game — and with no episodes installed
+nothing in this code runs at all.
