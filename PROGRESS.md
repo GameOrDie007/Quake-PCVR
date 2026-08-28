@@ -1422,3 +1422,36 @@ confirmed separately: `door_touch` calls `ex_centerprint` with
 **On both branches.** The episodes are ours to ship, so making their messages
 work is not a change to Team Beef's game — and with no episodes installed
 nothing in this code runs at all.
+
+## Their own text, found in the level editor files
+
+The first pass recovered only the messages that have a classic Quake
+equivalent, so the episodes' own writing still showed as tokens — he saw
+`$mg3_map1_upgrade_intro` when picking up the head in Dawn of the Machine.
+Two things were missing.
+
+**Plenty of tokens are not in the progs at all.** They are `message` keys on
+map entities, so they live in each BSP's entity lump. The generator now reads
+those too, which is where `$mg3_map1_upgrade_intro` was.
+
+**Their wording is in the paks after all** — in `fgd/*.fgd`, the level editor
+definition files, as `"$token" : "the text"`. That is the authentic source and
+it covers the episodes' own writing, which exists nowhere else on disk:
+
+```
+"$mg3_map1_upgrade_intro" : "Time has made you weak.\nSeek upgrades to restore your strength.\n"
+```
+
+The table is now 503 messages: **307 from their own .fgd**, 37 recovered from
+Quake's progs, and 159 with no wording anywhere — those live only inside their
+engine. Checked: `$mg3_hub_selected_easy` appears in `progs.dat` and nowhere
+else in the entire Quake install.
+
+Those 159 fall back to the token with its leading context dropped, so
+`$mg3_hub_selected_easy` reads "Selected easy" and `$map_escape` reads
+"Escape" rather than echoing a raw token at the player. Honest, readable, and
+obviously not their prose.
+
+Several of their messages are three or four lines of centerprint, so the
+generator escapes the line breaks to keep one entry per line and
+`SV_LoadQCStrings` turns them back on load.

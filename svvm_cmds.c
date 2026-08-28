@@ -3269,7 +3269,25 @@ void SV_LoadQCStrings(void)
 		tab = strchr(p, '\t');
 		if (p[0] == '$' && tab && sv_numqcstrings < count)
 		{
+			char *r, *w;
+
 			*tab = 0;
+
+			// A message's own line breaks are escaped so that each entry stays
+			// on one line of the file. Several of theirs are three or four
+			// lines of centerprint, so they have to come back.
+			for (r = w = tab + 1; *r; )
+			{
+				if (r[0] == '\\' && r[1] == 'n')
+				{
+					*w++ = '\n';
+					r += 2;
+				}
+				else
+					*w++ = *r++;
+			}
+			*w = 0;
+
 			sv_qcstrings[sv_numqcstrings].token = p;
 			sv_qcstrings[sv_numqcstrings].text = tab + 1;
 			sv_numqcstrings++;
