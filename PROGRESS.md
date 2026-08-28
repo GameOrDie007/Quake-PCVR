@@ -1575,3 +1575,32 @@ inside a headset is a thing to ask for rather than to be given.
 It is on the PC Options page as the sixth item, because a cvar that can only
 be typed into a console is not reachable from inside a headset. `menu_pcoptions`
 opens that page from the console, matching `menu_gameselect`.
+
+## And back again: the mirror is not worth a broken headset
+
+The blit was moved into `VID_Finish` to get it in front of the window swap.
+That broke the headset: a corner of the image on the monitor, nothing in the
+headset at all. `VID_Finish` is not called once a frame - it is reached from
+inside the per-eye render, because the engine updates and swaps the window once
+for **each eye** - so the blit was running in the middle of an eye pass.
+
+Saving and restoring the framebuffer bindings did not rescue it, which is the
+useful part: the problem is not only the binding, it is being there at all.
+
+Reverted to the arrangement that had been in place for the life of the port -
+blit from `TBXR_submitFrame`, after everything - which leaves the window black
+and the headset correct. `vr_mirror` and its menu entry stay, and the window
+mode is now applied from `submitFrame` too, so nothing of ours runs inside the
+engine's screen update.
+
+Two rounds of somebody's testing time went on this, both spent on GL changes
+shipped without ever being seen in a headset - the exact thing recorded further
+up this file as the lesson from the notify-area bug. The rule is not "reproduce
+before reading source", it is **reproduce before shipping**, and a change that
+cannot be reproduced locally is a change that has to be tested by the person
+with the headset *before* it goes anywhere near a release.
+
+The mirror remains open. The one arrangement not yet tried is blitting in
+`submitFrame` as now and swapping the window there, which puts the mirror in
+front of a swap without touching the eye pass. That is a deliberate experiment
+for a session with the headset on, not something to slip into a release.

@@ -2439,7 +2439,8 @@ int VID_GetGamma (unsigned short *ramps, int rampsize)
 	resolution and the OpenXR session are all untouched, which is why this can
 	be changed while playing where supersampling and anti-aliasing cannot.
 */
-static void VID_ApplyMirrorMode(void)
+void VID_ApplyMirrorMode(void);
+void VID_ApplyMirrorMode(void)
 {
 	static int applied = -1;
 	int want = bound(0, vr_mirror.integer, 2);
@@ -2516,30 +2517,6 @@ void VID_Finish (void)
 	}
 }
 #endif
-			/*
-				The desktop mirror has to be the last thing written to the back
-				buffer before it is presented. Declared here rather than included,
-				so this file need not pull in the OpenXR headers.
-			*/
-			{
-				extern void TBXR_MirrorToWindow(void);
-
-				if (VR_Enabled())
-				{
-					VID_ApplyMirrorMode();
-
-					if (vr_mirror.integer != 0)
-						TBXR_MirrorToWindow();
-					else
-					{
-						// Otherwise the window keeps whatever frame it last had.
-						qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-						qglClearColor(0, 0, 0, 1);
-						qglClear(GL_COLOR_BUFFER_BIT);
-					}
-				}
-			}
-
 #if SDL_MAJOR_VERSION == 1
 			SDL_GL_SwapBuffers();
 #else
