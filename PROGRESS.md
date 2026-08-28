@@ -1455,3 +1455,16 @@ obviously not their prose.
 Several of their messages are three or four lines of centerprint, so the
 generator escapes the line breaks to keep one entry per line and
 `SV_LoadQCStrings` turns them back on load.
+
+## The intermission text takes a different road
+
+`$mg3_start_intermission` still showed as a token even though it was in the
+table with its real text. It is not printed — it is **written straight into
+the message** by the QuakeC, `WriteByte(svc_finale)` then `WriteString(text)`,
+so it never passed through the three `ex_` functions.
+
+`VM_SV_WriteString` now translates too, as do the stock `centerprint` and
+`sprint` builtins in case any of their code reaches for those directly. That
+is every road a QuakeC string can take to the player. Anything not beginning
+with `$` is returned untouched, so all of it is inert for Quake itself and
+both mission packs.

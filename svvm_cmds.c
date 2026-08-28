@@ -6,6 +6,9 @@
 //============================================================================
 // Server
 
+// Defined further down, with the re-release message table it reads.
+static const char *SV_QCString(const char *s);
+
 
 
 const char *vm_sv_extensions =
@@ -392,7 +395,7 @@ static void VM_SV_sprint(prvm_prog_t *prog)
 		return;
 
 	MSG_WriteChar(&client->netconnection->message,svc_print);
-	MSG_WriteString(&client->netconnection->message, string);
+	MSG_WriteString(&client->netconnection->message, SV_QCString(string));
 }
 
 
@@ -427,7 +430,7 @@ static void VM_SV_centerprint(prvm_prog_t *prog)
 
 	VM_VarString(prog, 1, string, sizeof(string));
 	MSG_WriteChar(&client->netconnection->message,svc_centerprint);
-	MSG_WriteString(&client->netconnection->message, string);
+	MSG_WriteString(&client->netconnection->message, SV_QCString(string));
 }
 
 /*
@@ -1456,7 +1459,14 @@ static void VM_SV_WriteCoord(prvm_prog_t *prog)
 static void VM_SV_WriteString(prvm_prog_t *prog)
 {
 	VM_SAFEPARMCOUNT(2, VM_SV_WriteString);
-	MSG_WriteString (WriteDest(prog), PRVM_G_STRING(OFS_PARM1));
+	/*
+		The re-release's text is a localisation token wherever it appears, and
+		the intermission and finale text is written into the message here
+		rather than printed - which is why it still showed as a token when the
+		prints had been dealt with. Anything not beginning with $ comes back
+		untouched, so this is inert for Quake and both mission packs.
+	*/
+	MSG_WriteString (WriteDest(prog), SV_QCString(PRVM_G_STRING(OFS_PARM1)));
 }
 
 static void VM_SV_WriteUnterminatedString(prvm_prog_t *prog)
