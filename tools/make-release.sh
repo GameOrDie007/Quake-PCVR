@@ -35,6 +35,16 @@ if [ ! -f "$SRC/darkplaces-sdl.exe" ]; then
 	exit 1
 fi
 
+# The staging folder is rebuilt from scratch every time, and running Setup.bat
+# inside one turns it into a playable install - which is easy to do by mistake
+# and then play in. Saved games are the one thing here that cannot be rebuilt,
+# so their presence stops the wipe rather than being quietly deleted.
+if [ -d "$STAGE" ] && [ -n "$(find "$STAGE" -name '*.sav' -print -quit 2>/dev/null)" ]; then
+	echo "$STAGE has saved games in it - refusing to delete it." >&2
+	echo "Move them somewhere safe, or point this at another folder." >&2
+	exit 1
+fi
+
 rm -rf "$STAGE"
 mkdir -p "$STAGE/id1" "$STAGE/tools"
 
