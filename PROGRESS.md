@@ -30,8 +30,8 @@ of the Past all work. 3993x4243 per eye at 72Hz.
 ## The package
 
 `tools/package-release.sh <dir>` builds a self-contained install: binary,
-run-time DLLs, their shipped config and weapon wheel, the owner's paks, the
-soundtrack, Dimension of the Past, his Quest saves, three launchers and a
+run-time DLLs, their shipped config and weapon wheel, the player's paks, the
+soundtrack, Dimension of the Past, the player's Quest saves, three launchers and a
 README.
 
 **Portability was incidental and is now guaranteed.** Saves and config stayed
@@ -63,8 +63,8 @@ the README says to point shortcuts at a `.bat`.
 
 
 `tools/package-release.sh` builds `E:\Games\Quake VR (1to1)`: binary,
-run-time DLLs, their shipped config and weapon wheel, the owner's paks, the
-soundtrack, Dimension of the Past and his Quest saves. Config, saves and
+run-time DLLs, their shipped config and weapon wheel, the player's paks, the
+soundtrack, Dimension of the Past and the player's Quest saves. Config, saves and
 screenshots stay inside the folder.
 
 ## Next: the PC branch
@@ -115,7 +115,7 @@ Quake II.
 | `../QuakeQuest-refs/dp-upstream` | upstream DarkPlaces (xonotic/darkplaces) |
 | `../QuakeQuest-refs/dp-2013` | stock base, worktree at `a2210a95` |
 | `../QuakeQuest-refs/qq-dp-lf` | **HEAD engine, LF-normalised — the port target** |
-| `../QuakeQuest-refs/qq-155` | their v1.5.5 (the owner's APK), worktree |
+| `../QuakeQuest-refs/qq-155` | their v1.5.5 (the player's APK), worktree |
 | `../QuakeQuest-refs/qq155-dp-lf` | v1.5.5 engine, LF-normalised, to see what HEAD changed |
 
 Diff with `diff -uw ../QuakeQuest-refs/dp-2013/<f> ../QuakeQuest-refs/qq-dp-lf/<f>`.
@@ -127,10 +127,10 @@ The installed APK at `E:\Games\Quest Ports\APKs\QuakeQuest.apk` reports a build
 stamp of `22:44:15 Feb  5 2023`, which is tag **v1.5.5** (`e8a6928`,
 2023-02-05). The owner's saves and `config.cfg` came from that build.
 
-**Target decided by the owner (2026-08-25): master HEAD** (`dffd724`,
+**Target: master HEAD** (`dffd724`,
 2026-08-01, untagged). Everything below is measured against HEAD.
 
-What HEAD has that his APK does not:
+What HEAD has that the player's APK does not:
 
 - **`r_weaponwheel.c`** (845 lines) plus ~90 lines of integration and an
   `assets/weaponwheel.json`. Self-contained — its own small JSON parser reading
@@ -151,8 +151,8 @@ What HEAD has that his APK does not:
   Android-side; irrelevant to PC but harmless.
 - `v1.5.6`'s two input fixes and the firmware-v53 crash fix are included.
 
-The one cost: HEAD is untagged and the owner has never played it, so any
-behaviour that differs from his APK needs to be checked against intent rather
+The one cost: HEAD is untagged and it has never been played, so any
+behaviour that differs from the player's APK needs to be checked against intent rather
 than against memory.
 
 ## The changeset, classified
@@ -229,7 +229,7 @@ outside. That was the expected risk and it looks smaller than feared.
 ## Their defaults, from source and from the shipped APK
 
 `assets/commandline.txt` is just `quake` — no hidden launcher flags, unlike
-Quake II's `gl1_stereo 8`. So the built-in defaults are what he plays:
+Quake II's `gl1_stereo 8`. So the built-in defaults are what it runs with:
 
 - `SS_MULTIPLIER` **1.3**, `NUM_MULTI_SAMPLES` **1** (no MSAA),
   `REFRESH` **0** (runtime default). His `config.cfg` records the resulting
@@ -242,14 +242,14 @@ Quake II's `gl1_stereo 8`. So the built-in defaults are what he plays:
 - Shipped `assets/config.cfg` is stock binds plus `cl_particles_quality 2`,
   `cl_stainmaps 1`, `sensitivity 4`, `snd_speed 44100`.
 - His runtime `config.cfg` adds `vr_yawmode 2` (smooth turn) and
-  `r_lasersight 0` — so he plays with smooth turning and the laser sight off.
+  `r_lasersight 0` — so it runs with smooth turning and the laser sight off.
 - HEAD adds ten weapon-wheel cvars, all archived and on by default:
   `vr_weaponwheel` 1 (dominant-hand grip), `vr_weaponwheel_distance` 0.35 m,
   `_radius` 0.2 m, `_modelsize` 0.11 m, `_modelpitch` 20, `_modelyaw` -145,
   `_spin` 45 deg/s, `_deflection` 22.5, `_slowmo` 0.3 (game speed while open).
 
-None of these defaults changed between v1.5.5 and HEAD, so his tuned settings
-carry over unchanged; the wheel is the only thing that will be new to him.
+None of these defaults changed between v1.5.5 and HEAD, so the player's tuned settings
+carry over unchanged; the wheel is the only thing that will be new to the player.
 
 Game data: registered `id1` PAK0+PAK1, `dopa`, a 79MB soundtrack in
 `id1/sound/cdtracks`, at `E:\Games\Quest Ports\QuakeQuest`. No HD texture or
@@ -274,7 +274,7 @@ Flatscreen stays working through a `vr_enabled` runtime gate: with VR off,
 
 # Milestone 1 (flatscreen baseline) — complete
 
-Stock DarkPlaces `a2210a95` builds and runs on Windows 11 with the owner's
+Stock DarkPlaces `a2210a95` builds and runs on Windows 11 with the player's
 registered `id1` data. E1M1 loads and renders correctly: world geometry,
 lighting, HUD and viewmodel all present. Sound initialises, the OGG soundtrack
 libraries load, and the engine shuts down cleanly.
@@ -321,12 +321,12 @@ None of these touch anything Team Beef modified, so none of them cost fidelity.
 
 The build needs `SDL2.dll` and the two MinGW runtime DLLs beside the exe.
 DarkPlaces loads everything else at runtime by name: `libcurl-4.dll`,
-`zlib1.dll`, and — for the owner's 79MB soundtrack, which is `.ogg` faketracks
+`zlib1.dll`, and — for the player's 79MB soundtrack, which is `.ogg` faketracks
 in `id1/sound/cdtracks/` — `libvorbis-0.dll`, `libvorbisfile-3.dll` and
 `libogg-0.dll`. All are present in mingw64 and copied beside the binary.
 
-`run/` holds a test install: `run/id1/` with hard links to the owner's PAK0 and
-PAK1, so his data at `E:\Games\Quest Ports\QuakeQuest` is never written to.
+`run/` holds a test install: `run/id1/` with hard links to the player's PAK0 and
+PAK1, so the player's data at `E:\Games\Quest Ports\QuakeQuest` is never written to.
 It is gitignored.
 
 ```
@@ -504,7 +504,7 @@ size lives in `vid_mirrorwidth`/`vid_mirrorheight` for that blit.
 
 Unlike their build this does **not** write the `vid_width`/`vid_height` cvars.
 Those are archived, and a 3600-pixel window recorded in `config.cfg` would
-break the flatscreen fallback the owner asked to keep working. Their build has
+break the flatscreen fallback, which had to keep working. Their build has
 no flatscreen mode, so the question does not arise for them.
 
 ## One trap taken from the Quake II port
@@ -632,7 +632,7 @@ all correct.
 ## Cvar fidelity, measured
 
 The build registers **1,299 cvars**, and **every cvar named in either of their
-configs exists in it** — their shipped `assets/config.cfg` and the owner's own
+configs exists in it** — their shipped `assets/config.cfg` and the player's own
 `config.cfg` off the Quest. That is the same check the Quake II port used to
 conclude no VR option was missing.
 
@@ -654,11 +654,11 @@ The default is `E:\Games\Quake VR (1to1)`, mirroring the Quake II port's
 convention.
 
 It carries the binary and every DLL it loads, their shipped `config.cfg` (only
-if absent, since the engine rewrites it) and `weaponwheel.json`, the owner's
-paks, the 79MB soundtrack, Dimension of the Past, and his saves off the Quest.
+if absent, since the engine rewrites it) and `weaponwheel.json`, the player's
+paks, the 79MB soundtrack, Dimension of the Past, and the player's saves off the Quest.
 Paks and soundtrack are hard linked — 170MB that is never written to — while
 saves are **copied**, because the game rewrites them and the Quest-side
-originals must not change underneath him. Config, saves and screenshots land
+originals must not change underneath the player. Config, saves and screenshots land
 inside the folder, so backing it up backs up everything.
 
 ## Fixed: mods and Dimension of the Past
@@ -832,11 +832,11 @@ add.
 ## Both builds are done
 
 Nothing outstanding. The two installs are self-contained and carry the
-owner's paks, soundtrack, Dimension of the Past and his Quest saves; config,
+owner's paks, soundtrack, Dimension of the Past and the player's Quest saves; config,
 saves and screenshots live inside each folder, so backing one up backs up
 everything and copying it to another PC carries the settings.
 
-`cl_particles_quake` is archived, so his choice of Quake particles persists
+`cl_particles_quake` is archived, so the player's choice of Quake particles persists
 without touching the default - which stays at theirs, keeping an untouched
 install identical to the 1:1 build.
 
@@ -1042,8 +1042,8 @@ A line of text sat at the top of the eye buffer at all times. The first
 diagnosis was `HandleInput_Default`'s two `ALOGE` controller-position lines,
 which genuinely do print through `Con_Printf` every frame and genuinely did
 belong in the log rather than on screen — that change stands. But it was not
-what he was seeing, and **it was reasoned out of the source rather than
-measured**. The tell was there to be had: he had said it appears in Dimension
+what was actually on screen, and **it was reasoned out of the source rather than
+measured**. The tell was there to be had: the report had said it appears in Dimension
 of the Machine and Dawn of the Machine, and it "talks about errors".
 
 Running mg3 flatscreen with `-condebug` for ten seconds settled it in one
@@ -1079,7 +1079,7 @@ run without a headset. **Reproduce it locally before reading source.**
 
 # Dawn of the Machine's crash: one malformed model
 
-He reported crashing out of Dawn of the Machine after about five minutes,
+It was reported crashing out of Dawn of the Machine after about five minutes,
 several times. Reproduced without a headset inside ten minutes, by running
 mg3 flatscreen through map1, map2 and map3 with logging on:
 
@@ -1131,14 +1131,14 @@ even be harvested from the existing pictures — across every word Quake ships
 in that alphabet there is no F, and several names need one.
 
 The 2021 re-release does have that alphabet as a real font, and its own
-expansion menu — the one he pointed at — is drawn with it. `QuakeEX.kpf` is a
+expansion menu — the one this was matched against — is drawn with it. `QuakeEX.kpf` is a
 plain zip; `fonts/qfont.png` is the atlas and `fonts/qfont.kfont` is a text
 table of `codepoint x y width height offset`, one line per glyph, all 28 tall,
 with full Latin coverage.
 
-`tools/make-menu-art.py` reads that from **the owner's own Quake install** and
-writes the six names into **his own install** as 32-bit TGAs, the same way the
-packaging script already takes his paks. Nothing of theirs is copied into this
+`tools/make-menu-art.py` reads that from **the player's own Quake install** and
+writes the six names into **the player's own install** as 32-bit TGAs, the same way the
+packaging script already takes the player's paks. Nothing of theirs is copied into this
 repository. Without python, PIL or a re-release install it prints a line and
 skips, and the menu falls back to drawing the names as text — the page is
 artwork or text as a whole, never a mixture, so it cannot end up half and
@@ -1153,8 +1153,8 @@ is left at full brightness and the rest sit at 0.8.
 
 # The second Dawn of the Machine crash: an achievement
 
-He played a couple of minutes and was thrown out again — a different failure
-from the malformed model, and this one caught in his own log because the
+A couple of minutes of play ended in being thrown out again — a different failure
+from the malformed model, and this one caught in the session log because the
 session was launched with `-condebug`:
 
 ```
@@ -1199,7 +1199,7 @@ the prefix separates the two cleanly.
 
 **An unrecognised command is no longer fatal.** Stock ends the game; for a
 local single player session that is out of all proportion, and it is what cost
-him two evenings. A lost packet is a condition the netcode already handles, so
+two evenings of play. A lost packet is a condition the netcode already handles, so
 the rest of that packet is now abandoned instead — `readcount` is set to the
 end, which lets the loop finish the ordinary way so everything after it still
 runs. A stream that has genuinely lost its place fails on every packet rather
@@ -1250,29 +1250,29 @@ changeable in the Controller menu.
 
 ## Water in map1: investigated, works
 
-He reported bouncing on top of water at 1 health without dying, and wondered
-whether something was left in debug. Checked without a headset, because his
+A report of bouncing on top of water at 1 health without dying, wondering
+whether something had been left in debug. Checked without a headset, because the
 save was sitting there:
 
 - `sv_user.c`, which is where Quake's water movement and drowning live, is
   **byte identical to stock** — Team Beef changed nothing about water. The only
   physics change in their whole changeset is `SV_SetWeapon_ClientOrigin` in
   `sv_phys.c`, which moves the entity origin momentarily when a shot is fired.
-- mg3's `start` hub has **no water at all**; `map1`, where he was, has 982
+- mg3's `start` hub has **no water at all**; `map1`, where the player was, has 982
   water leafs. Neither map has a water brush entity — it is ordinary world
   water.
-- Copying his own save, editing the player's origin into the middle of map1's
-  largest water volume and loading it: he **sinks to the floor**
+- Copying the player's own save, editing the player's origin into the middle of map1's
+  largest water volume and loading it: the player **sinks to the floor**
   (z −250 → −359.97), `waterlevel 3`, `watertype -3`, and after about ten
   seconds drowns — health 22 → −6, `deadflag 3`, `movetype` to
   MOVETYPE_TOSS. Correct Quake behaviour, start to finish.
 
 So deep water in that map is not broken, and nothing debug-related is enabled.
-What has not been reproduced is the surface behaviour he actually saw. Two
+What has not been reproduced is the surface behaviour actually seen. Two
 ordinary explanations fit without any bug: **water cancels fall damage in
-Quake**, so a fall that should have killed him at 1 health does nothing; and
+Quake**, so a fall that should have killed the player at 1 health does nothing; and
 **you only drown at waterlevel 3**, so standing in shallow water is survivable
-indefinitely. Neither has been confirmed against what he saw, and the one thing
+indefinitely. Neither has been confirmed against what was seen, and the one thing
 that would settle it is where in the map it happened.
 
 ---
@@ -1299,7 +1299,7 @@ None of it was in the VR layer, and none of it was Team Beef's:
 
 Their per-frame `ALOGE` controller logging was also moved off the screen to
 `Con_DPrintf`, which was a real per-frame print into the same notify area even
-though it was not the text he was seeing.
+though it was not the text that was on screen.
 
 The lesson, recorded above in full: two rounds went to a cause reasoned out of
 the source when ten seconds of `-condebug` named it outright. Every one of
@@ -1315,10 +1315,10 @@ Two installs, both self-contained and portable:
 | `vr-1to1` | `quakequest-vr-1to1` | `E:\Games\Quake VR (1to1)` — their game on PC, nothing added |
 | `vr-pc` | `quakequest-vr-pc` | `E:\Games\Quake VR (PC)` — the above plus the PC additions |
 
-Both carry Quake, both mission packs and all four episodes, the owner's paks,
-the soundtrack and his Quest saves. The PC build adds the game select page in
+Both carry Quake, both mission packs and all four episodes, the player's paks,
+the soundtrack and the player's Quest saves. The PC build adds the game select page in
 the re-release's own menu font, a PC Options page (supersampling,
-anti-aliasing, particle style, door Z-fighting, HUD height), and his own
+anti-aliasing, particle style, door Z-fighting, HUD height), and the player's own
 preference of smooth turning at 5.
 
 ## Known and deliberately not fixed
@@ -1332,7 +1332,7 @@ a working test session.
 
 **Water at the surface**, reported as bouncing on top at 1 health without
 dying, was investigated and nothing was found: `sv_user.c` is byte identical to
-stock, and his own save with the player moved into map1's water sinks, drowns
+stock, and the player's own save with the player moved into map1's water sinks, drowns
 and dies correctly. Water cancelling fall damage and drowning needing
 waterlevel 3 both explain it without a bug. Not reproduced, not confirmed.
 
@@ -1343,7 +1343,7 @@ included — see above.
 
 # The episodes' notifications: nothing was ever being sent
 
-He noticed that Dawn of the Machine never tells you a door needs a key, where
+It was noticed that Dawn of the Machine never tells you a door needs a key, where
 Quake puts "You need the silver key" in the middle of the screen. It is the
 same shape as the achievement bug — their QuakeC expecting an engine that is
 not this one — and it silences **every** message in all three re-release
@@ -1389,8 +1389,8 @@ data: not in the paks, not in `QuakeEX.kpf`, not in their executable.
 But their QuakeC *is* the original with the strings swapped, so the original
 wording is still sitting in id1's own `progs.dat`, and a token's words appear
 verbatim in the string it replaced. `tools/make-qc-strings.py` matches them up
-and writes `qc_strings.txt` beside the paks, built from the owner's own install
-into his own install, like the paks and the menu artwork. 187 tokens, 37 of
+and writes `qc_strings.txt` beside the paks, built from the player's own install
+into the player's own install, like the paks and the menu artwork. 187 tokens, 37 of
 them matched to classic Quake text — which is every message that has a classic
 equivalent, the key and secret lines among them. The rest are the episodes'
 own new messages, hub hints and the like, and fall back to their token spelled
@@ -1426,7 +1426,7 @@ nothing in this code runs at all.
 ## Their own text, found in the level editor files
 
 The first pass recovered only the messages that have a classic Quake
-equivalent, so the episodes' own writing still showed as tokens — he saw
+equivalent, so the episodes' own writing still showed as tokens — the report described
 `$mg3_map1_upgrade_intro` when picking up the head in Dawn of the Machine.
 Two things were missing.
 
@@ -1501,7 +1501,7 @@ it is shared by all three VMs, and no token reaches it.
 engine — and of those, **only 16 are actually placed in a map**, so the rest
 can never be seen. The 145 unreachable ones are mostly the re-release's own
 id1 campaign finales (`$qc_finale_e1` and friends), which this install never
-runs: its id1 is the owner's classic paks, whose QuakeC has the text as
+runs: its id1 is the player's classic paks, whose QuakeC has the text as
 literal strings and no tokens at all.
 
 The 16 that can be seen are minor and read acceptably: the hub's difficulty
