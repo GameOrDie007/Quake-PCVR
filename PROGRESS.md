@@ -1468,3 +1468,43 @@ so it never passed through the three `ex_` functions.
 is every road a QuakeC string can take to the player. Anything not beginning
 with `$` is returned untouched, so all of it is inert for Quake itself and
 both mission packs.
+
+## Swept, so the class is closed
+
+Rather than wait for the next one to be spotted, both halves were checked
+exhaustively.
+
+**Every token in the game data is in the table.** Scanning every progs string
+table, every map entity lump and every text file across all six games finds
+503 tokens, and all 503 are covered. No level name is a token either, so the
+scoreboard and intermission titles were never affected.
+
+**Every function that receives a token is hooked.** Decompiling the three
+episodes for statements that pass a token into a call gives exactly five
+receivers:
+
+| receiver | how it is handled |
+|---|---|
+| `ex_centerprint` | builtin #641 |
+| `ex_sprint` | builtin #642 |
+| `ex_bprint` | builtin #643 |
+| `centerprint_all` | their own QuakeC loop over the clients, which calls `ex_centerprint` |
+| `WriteString` | translated in `VM_SV_WriteString` |
+
+Plus one `dprint` in mg3, which is a developer print and invisible at
+`developer 0`. The stock `bprint` in `prvm_cmds.c` is deliberately left alone:
+it is shared by all three VMs, and no token reaches it.
+
+## What is left, exactly
+
+342 of the 503 have their real text. The other 161 exist only inside their
+engine — and of those, **only 16 are actually placed in a map**, so the rest
+can never be seen. The 145 unreachable ones are mostly the re-release's own
+id1 campaign finales (`$qc_finale_e1` and friends), which this install never
+runs: its id1 is the owner's classic paks, whose QuakeC has the text as
+literal strings and no tokens at all.
+
+The 16 that can be seen are minor and read acceptably: the hub's difficulty
+buttons ("Button easy"), a few mg3 boss and map lines, and four horde-mode
+lines in mg1. **Every ending is real text** — mg1's five episode endtexts and
+its finale, Dimension of the Past's finale, and mg3's map8 intermission.
