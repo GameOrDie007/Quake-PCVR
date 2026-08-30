@@ -446,6 +446,7 @@ cvar_t cl_pitchmult = {CVAR_SAVE, "cl_pitchmult","1.0","Multiplier for yaw (leav
 cvar_t cl_controllerdeadzone = {0, "cl_controllerdeadzone","0.05","Amount of deadzone to prevent movement drift due to badly calibrated controller (0.0 to 1.0)"};
 cvar_t cl_righthanded = {CVAR_SAVE, "cl_righthanded","1","right-handed?"};
 cvar_t vr_weaponpitchadjust = {CVAR_SAVE, "vr_weaponpitchadjust","-20.0","Weapon pitch adjustment"};
+cvar_t vr_quicksave = {CVAR_SAVE, "vr_quicksave","1","left controller face buttons: 1 = X quick saves and Y quick loads, 0 = Y toggles the controller text input instead"};
 cvar_t cl_trackingmode = {CVAR_SAVE, "cl_trackingmode","1","Tracking Mode:- 1 - 6DoF or 0 - 3DoF"};
 
 
@@ -2275,6 +2276,7 @@ void CL_InitInput (void)
 	Cvar_RegisterVariable(&cl_controllerdeadzone);
 	Cvar_RegisterVariable(&cl_righthanded);
 	Cvar_RegisterVariable(&vr_weaponpitchadjust);
+	Cvar_RegisterVariable(&vr_quicksave);
 	Cvar_RegisterVariable(&cl_trackingmode);
 
 	Cvar_RegisterVariable(&cl_movecliptokeyboard);
