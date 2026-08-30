@@ -13,6 +13,47 @@ in this repository. Everything said about them is still worth reading: the
 
 ---
 
+# The X button was shipping a debug cheat
+
+Reported by a player on Discord: the left X button gives all weapons and ammo,
+and there is no binding in `config.cfg` to remove.
+
+It was never a binding. Team Beef had already written **quick save on X and
+quick load on Y**, but both sit behind
+
+```c
+static bool canUseQuickSave = false;
+```
+
+which is never assigned anywhere in their tree, so neither had ever run. What
+ran was the `else` branch, and inside it a give-all-weapons and god-mode block
+guarded by `#ifndef NDEBUG`. **Nothing in the makefile defines NDEBUG** -
+checked - so that block compiled into every shipped build, theirs and ours.
+
+Removed rather than re-guarded: a cheat on a face button is not behaviour
+worth reproducing. Their quick load was also missing its trailing newline,
+which `Cbuf_InsertText` does not add, so the command would have run joined to
+whatever was inserted after it.
+
+Both are now live behind the archived cvar `vr_quicksave` (default 1), and
+only outside the big screen - X in a menu would otherwise announce a save the
+engine had refused to make. Quick load buzzes but prints nothing, because the
+load either happens or prints its own error and a message would be a claim we
+cannot back up. Setting `vr_quicksave 0`, from the new **Left X and Y** row on
+the PC Options page, restores their text-input keyboard on Y instead.
+
+Verified without a headset: `save quick` then `load quick` round-trips, and
+the menu row renders. The buttons themselves need a headset.
+
+**There is no over-the-shoulder gesture for quick save in this codebase.** A
+player had been told there was; grepping the whole tree finds nothing. That
+claim appears to have been invented by whichever assistant produced it.
+
+Left on `vr-1to1` deliberately. That branch exists to be their build, cheat
+included, and it is not the one published.
+
+---
+
 # STATUS: 1:1 PORT COMPLETE - tag `quakequest-vr-1to1`
 
 Verified in the headset on a Quest 3 over Virtual Desktop. Stereo, head
