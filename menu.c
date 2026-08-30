@@ -3448,7 +3448,7 @@ static void M_Menu_GameSelect_Key (int key, int ascii)
 	Tegra's Z-buffer - a mobile concession that costs correctness on PC.
 */
 
-#define PCOPTIONS_ITEMS 6
+#define PCOPTIONS_ITEMS 7
 
 static int pcoptions_cursor;
 
@@ -3458,6 +3458,7 @@ extern cvar_t cl_particles_quake;
 extern cvar_t r_polygonoffset_submodel_offset;
 extern cvar_t vr_hud_height;
 extern cvar_t vr_mirror;
+extern cvar_t vr_quicksave;
 
 void M_Menu_PCOptions_f (void)
 {
@@ -3511,6 +3512,11 @@ static void M_Menu_PCOptions_Draw (void)
 	else
 		M_Options_PrintCommand("       Desktop mirror:  Window", true);
 
+	if (vr_quicksave.integer)
+		M_Options_PrintCommand("      Left X and Y:  Quick save / load", true);
+	else
+		M_Options_PrintCommand("      Left X and Y:  Y opens text input", true);
+
 	M_Options_PrintCommand(" ", true);
 
 	// vid.width and vid.height are the eye buffer in VR, which is the figure
@@ -3556,6 +3562,8 @@ static void M_Menu_PCOptions_Key (int key, int ascii)
 			Cvar_SetValueQuick(&vr_hud_height, bound(0.0f, vr_hud_height.value - 2.5f, 50.0f));
 		else if (pcoptions_cursor == 5)
 			Cvar_SetValueQuick(&vr_mirror, (vr_mirror.integer + 2) % 3);
+		else if (pcoptions_cursor == 6)
+			Cvar_SetValueQuick(&vr_quicksave, 1 - vr_quicksave.integer);
 		break;
 
 	case 'd':
@@ -3575,6 +3583,8 @@ static void M_Menu_PCOptions_Key (int key, int ascii)
 			Cvar_SetValueQuick(&vr_hud_height, bound(0.0f, vr_hud_height.value + 2.5f, 50.0f));
 		else if (pcoptions_cursor == 5)
 			Cvar_SetValueQuick(&vr_mirror, (vr_mirror.integer + 1) % 3);
+		else if (pcoptions_cursor == 6)
+			Cvar_SetValueQuick(&vr_quicksave, 1 - vr_quicksave.integer);
 		break;
 	}
 }

@@ -207,7 +207,7 @@ THIS FOLDER IS FULLY PORTABLE
   darkplaces-sdl.exe, or that protection is lost.
 
 CONTROLS
-  These are Team Beef's, unchanged.
+  Team Beef's, with one fix - see QUICK SAVE below.
     Left thumbstick .......... move
     Right thumbstick L/R ..... turn (snap by default, 45 degrees)
     Right thumbstick U/D ..... next / previous weapon
@@ -216,8 +216,22 @@ CONTROLS
     Off-hand trigger ......... run
     Dominant grip ............ weapon wheel
     A ........................ jump
-    Y ........................ text entry keyboard
+    X ........................ quick save
+    Y ........................ quick load
     Left menu button ......... in-game menu
+
+QUICK SAVE AND QUICK LOAD
+  X quick saves, Y quick loads. Both take effect in-game only, not in menus.
+
+  Team Beef had written both, on these same two buttons, but they sat behind
+  a flag that was declared false and never set, so neither had ever run. What
+  ran instead was a debug block that gave god mode and every weapon - it is
+  wrapped in #ifndef NDEBUG, and nothing in the build defines NDEBUG, so the
+  cheat reached players on the X button. That block is gone.
+
+  If you would rather have their controller text-input keyboard back on Y,
+  set "Left X and Y" to "Y opens text input" on the PC Options page. Quick
+  save and load are then unbound, as they were before.
 
   Options -> Controller Settings has handedness, turn mode, snap angle and
   6DoF/3DoF weapon tracking.

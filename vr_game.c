@@ -41,6 +41,7 @@ extern cvar_t cl_walkdirection;
 extern cvar_t cl_controllerdeadzone;
 extern cvar_t cl_righthanded;
 extern cvar_t vr_weaponpitchadjust;
+extern cvar_t vr_quicksave;
 extern cvar_t slowmo;
 extern cvar_t bullettime;
 extern cvar_t cl_trackingmode;
@@ -765,8 +766,24 @@ static void HandleInput_Default(  )
                                               xrButton_Trigger, K_MOUSE1);
             }
 
-            static bool canUseQuickSave = false;
-            if (canUseQuickSave)
+            /*
+                X quick saves, Y quick loads.
+
+                Both were already written here and sat behind a flag that was
+                declared false and never assigned anywhere, so neither had ever
+                run. What did run was the else branch, whose give-all-weapons
+                and god-mode block is guarded by #ifndef NDEBUG - and NDEBUG is
+                not defined by this makefile, so a debug cheat was reaching
+                players on the X button. That block is gone.
+
+                Their load was also missing its trailing newline. Cbuf_InsertText
+                does not add one, so the command would have sat unterminated and
+                then run joined to whatever was inserted after it.
+
+                Only outside the big screen: X in a menu would otherwise announce
+                "Quick Saved" over a save the engine had refused to make.
+            */
+            if (vr_quicksave.integer && bigScreen == 0)
             {
                 if ((leftTrackedRemoteState_new.Buttons & xrButton_X) &&
                     (leftTrackedRemoteState_new.Buttons & xrButton_X) !=
@@ -774,28 +791,22 @@ static void HandleInput_Default(  )
                     Cbuf_InsertText("save quick\n");
 
                     //Vibrate to let user know they successfully saved
-					SCR_CenterPrint("Quick Saved");
+                    SCR_CenterPrint("Quick Saved");
                     TBXR_Vibrate(500, cl_righthanded.integer ? 1 : 2, 1.0);
                 }
 
                 if ((leftTrackedRemoteState_new.Buttons & xrButton_Y) &&
                     (leftTrackedRemoteState_new.Buttons & xrButton_Y) !=
                     (leftTrackedRemoteState_old.Buttons & xrButton_Y)) {
-                    Cbuf_InsertText("load quick");
+                    Cbuf_InsertText("load quick\n");
+
+                    //Buzz only. The load either happens or prints its own error,
+                    //and a message here would be a claim we cannot back up.
+                    TBXR_Vibrate(500, cl_righthanded.integer ? 1 : 2, 1.0);
                 }
             }
-            else {
-#ifndef NDEBUG
-                //Give all weapons and all ammo and god mode
-                if ((leftTrackedRemoteState_new.Buttons & xrButton_X) &&
-                    (leftTrackedRemoteState_new.Buttons & xrButton_X) !=
-                    (leftTrackedRemoteState_old.Buttons & xrButton_X)) {
-                    Cbuf_InsertText("God\n");
-                    Cbuf_InsertText("Impulse 9\n");
-                    breakHere = 1;
-                }
-#endif
-
+            else if (!vr_quicksave.integer)
+            {
                 //Toggle text input
                 if ((leftTrackedRemoteState_new.Buttons & xrButton_Y) &&
                     (leftTrackedRemoteState_new.Buttons & xrButton_Y) !=
