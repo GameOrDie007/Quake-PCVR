@@ -57,6 +57,7 @@ extern cvar_t bullettime;
 
 extern void BigScreenMode(int mode);
 qboolean VR_MenuInWorld(void);
+qboolean VR_Enabled(void);
 extern cvar_t vr_menu_in_world_dim;
 
 //Record yaw at the moment the menu is invoked
@@ -5485,6 +5486,35 @@ static void ModList_Enable (void)
 		return;
 	}
 
+	/*
+		In VR, do not change gamedir in place. FS_ChangeGameDirs ends in a
+		vid_restart, and the OpenXR swapchain images belong to the GL context
+		that destroys - so the session dies and nothing brings it back, which
+		looks like a crash rather than a consequence. Relaunch the process
+		instead, which is exactly what the Single Player game list does and the
+		reason that one has always worked.
+
+		DarkPlaces accepts -game more than once and keeps the order, so the
+		whole enabled stack survives rather than just the first entry. With
+		none enabled the command carries no -game at all, which relaunches
+		into the base game - the right answer for turning every mod off.
+	*/
+	if (VR_Enabled())
+	{
+		char cmd[MAX_INPUTLINE];
+
+		strlcpy (cmd, "relaunchgame", sizeof(cmd));
+		for (i = 0; i < numgamedirs; i++)
+		{
+			strlcat (cmd, " -game ", sizeof(cmd));
+			strlcat (cmd, gamedirs[i], sizeof(cmd));
+		}
+		strlcat (cmd, "\n", sizeof(cmd));
+
+		Cbuf_AddText (cmd);
+		return;
+	}
+
 	FS_ChangeGameDirs (modlist_numenabled, gamedirs, true, true);
 }
 
@@ -5647,9 +5677,11 @@ static void M_Init (void)
 	Cmd_AddCommand ("menu_keys", M_Menu_Keys_f, "open the key binding menu");
 	Cmd_AddCommand ("menu_video", M_Menu_Video_f, "open the video options menu");
 	Cmd_AddCommand ("menu_reset", M_Menu_Reset_f, "open the reset to defaults menu");
-	Cmd_AddCommand ("menu_reset", M_Menu_Controller_f, "open the yaw/pitch control menu");
+	// Was a second "menu_reset", which Cmd_AddCommand refused because the line
+	// above already claims that name - so the controller page had no console
+	// command at all, and the engine complained at every startup.
+	Cmd_AddCommand ("menu_controller", M_Menu_Controller_f, "open the yaw/pitch control menu");
 	Cmd_AddCommand ("menu_mods", M_Menu_ModList_f, "open the mods browser menu");
-	Cmd_AddCommand ("menu_pcoptions", M_Menu_PCOptions_f, "open the PC options menu");
 	Cmd_AddCommand ("help", M_Menu_Help_f, "open the help menu");
 	Cmd_AddCommand ("menu_quit", M_Menu_Quit_f, "open the quit menu");
 	Cmd_AddCommand ("menu_transfusion_episode", M_Menu_Transfusion_Episode_f, "open the transfusion episode select menu");
