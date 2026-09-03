@@ -644,6 +644,7 @@ void Mod_RenderInit(void);
 // Console units that a view centred 2D element must move to correct for the
 // asymmetric eye frustum the OpenXR runtime reports. Both are 0 on the big screen.
 void GetHUDOffset(float *x, float *y);
+float GetStereoConvergenceOffset(float distance);
 
 // r_weaponwheel.c
 void R_WeaponWheel_Init(void);

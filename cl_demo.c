@@ -406,6 +406,8 @@ CL_PlayDemo_f
 play [demoname]
 ====================
 */
+void VR_ResetDemoYaw(void);
+
 void CL_PlayDemo_f (void)
 {
 	char	name[MAX_QPATH];
@@ -431,6 +433,11 @@ void CL_PlayDemo_f (void)
 	}
 
 	cls.demostarting = true;
+
+	// A new demo gets a new facing: see VR_UpdateDemoYaw. Dropped here because
+	// between the demos of the attract loop the client disconnects, so the code
+	// that anchors it is not running to notice.
+	VR_ResetDemoYaw();
 
 	// disconnect from server
 	CL_Disconnect ();

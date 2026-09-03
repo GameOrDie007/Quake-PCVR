@@ -113,7 +113,12 @@ int			scr_con_margin_bottom;
 extern int	con_vislines;
 
 extern void BigScreenMode(int mode);
+qboolean VR_MenuInWorld(void);
+float VR_GetScreenLayerDistance(void);
+float VR_GetIPD(void);
 
+// Logged once, the first time a menu is drawn into the world in a session.
+static qboolean menudepthreported = false;
 
 static void SCR_ScreenShot_f (void);
 static void R_Envmap_f (void);
@@ -2197,7 +2202,53 @@ bool VR_GetMaxFovTangents(float *tanX, float *tanY);
 		R_WeaponWheel_DrawText();
 	}
 	SCR_DrawNetGraph ();
-	MR_Draw();
+
+	{
+		/*
+			The menu has no per-eye offset of its own - MR_Draw() takes no
+			arguments and the drawing is spread over the whole of menu.c - so the
+			shift is handed to the 2D primitives instead and taken straight back
+			afterwards, leaving nothing else to pick it up.
+
+			Zero unless the menu is being drawn into the world. It goes at the
+			screen layer's own distance rather than the HUD's: this is a
+			near-fullscreen panel, and the HUD's depth is arm's length, which
+			would shove it into the player's face.
+		*/
+		float menuoffset = 0.0f;
+
+		if (VR_MenuInWorld())
+		{
+			float convergence = GetStereoConvergenceOffset(VR_GetScreenLayerDistance());
+			float hudOffsetX, hudOffsetY;
+
+			// The frustum is asymmetric, so the centre of the eye buffer is not
+			// the forward axis; without this the menu is centred on the wrong
+			// place before the convergence shift is even applied.
+			GetHUDOffset(&hudOffsetX, &hudOffsetY);
+
+			menuoffset = (r_stereo_side ? -convergence : convergence) + hudOffsetX;
+
+			/*
+				Once per session, into the log rather than the screen. These
+				numbers cannot be worked out without a live session - they come
+				from the runtime's own per-eye frustum - so this is how the
+				derivation in GetStereoConvergenceOffset gets checked against a
+				real headset rather than against an assumed field of view.
+			*/
+			if (!menudepthreported && convergence != 0.0f)
+			{
+				menudepthreported = true;
+				Con_DPrintf("VR: menu in world at %.2fm - convergence %.2f console units, off-centre %.2f, IPD %.4fm\n",
+						VR_GetScreenLayerDistance(), convergence, hudOffsetX, VR_GetIPD());
+			}
+		}
+
+		DrawQ_SetStereoOffset(menuoffset);
+		MR_Draw();
+		DrawQ_SetStereoOffset(0.0f);
+	}
+
 	CL_DrawVideo();
 	R_Shadow_EditLights_DrawSelectedLightProperties();
 

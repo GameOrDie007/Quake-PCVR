@@ -55,6 +55,7 @@ cvar_t vr_worldscale = {CVAR_SAVE, "vr_worldscale", "26.2467", "VR World scale m
 qboolean VR_UseScreenLayer();
 float VR_GetIPD();
 bool VR_GetOffCenterFov(int eye, float *offsetX, float *offsetY);
+qboolean VR_GetEyeTangentWidth(int eye, float *width);
 
 float GetStereoSeparation()
 {
@@ -76,6 +77,31 @@ void GetHUDOffset(float *x, float *y)
 
 	*x = offsetX * vid_conwidth.integer;
 	*y = offsetY * vid_conheight.integer;
+}
+
+/*
+	Console units a 2D plane must shift in this eye, in the direction away from
+	the other eye, for the two images to fuse at `distance` metres.
+
+	2D is drawn across the whole eye buffer, so console x maps linearly onto the
+	eye's frustum: vid_conwidth console units span (tanRight - tanLeft) tangent
+	units. A plane at distance D needs each eye's image displaced by half the
+	IPD, which is a tangent shift of (IPD/2)/D, hence the ratio below.
+
+	Derived rather than tuned, and it checks out against the HUD's own constant:
+	Sbar_GetXOffset uses a fixed 20 console units, and solving this for 20 gives
+	a distance of roughly half a metre - arm's length, which is where a HUD
+	belongs and what the sibling Quake II port hangs its HUD at. Two numbers
+	chosen independently agreeing is the reason to trust this over a constant.
+*/
+float GetStereoConvergenceOffset(float distance)
+{
+	float width = 0.0f;
+
+	if (distance <= 0.0f || !VR_GetEyeTangentWidth(r_stereo_side, &width))
+		return 0.0f;
+
+	return ((VR_GetIPD() * 0.5f) / distance / width) * vid_conwidth.integer;
 }
 
 //
@@ -4238,8 +4264,8 @@ void GL_Main_Init(void)
 	}
 	Cvar_RegisterVariable(&vr_worldscale);
 	/*
-		PC additions, defined in vr_xr.c and both defaulting to their values.
-		Registered here rather than in the VR layer because that runs after
+		PC additions, defined in the VR layer and all defaulting to their values.
+		Registered here rather than in that layer because it runs after
 		config.cfg has been exec'd, which would discard any saved setting.
 		Declared locally so this engine file need not pull in the OpenXR and
 		Win32 headers.
@@ -4248,10 +4274,13 @@ void GL_Main_Init(void)
 		extern cvar_t vr_supersampling;
 		extern cvar_t vr_msaa;
 		extern cvar_t vr_mirror;
-
+		extern cvar_t vr_menu_in_world;
+		extern cvar_t vr_menu_in_world_dim;
 		Cvar_RegisterVariable(&vr_supersampling);
 		Cvar_RegisterVariable(&vr_msaa);
 		Cvar_RegisterVariable(&vr_mirror);
+		Cvar_RegisterVariable(&vr_menu_in_world);
+		Cvar_RegisterVariable(&vr_menu_in_world_dim);
 	}
 	Cvar_RegisterVariable(&r_motionblur);
 	Cvar_RegisterVariable(&r_damageblur);

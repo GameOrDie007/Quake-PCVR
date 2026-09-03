@@ -89,12 +89,84 @@ qboolean VR_Enabled(void)
 */
 int bigScreen = 1;
 
+// Defined below, next to the projection helpers it belongs with.
+static bool VR_EyeViewsValid(void);
+
 void BigScreenMode(int mode)
 {
 	if (bigScreen != 2)
 	{
 		bigScreen = mode;
 	}
+}
+
+/*
+	PC addition: keeping the world when a menu or the attract demo is up.
+
+	Team Beef send everything that is not gameplay to the flat quad, which on a
+	headset-only device is the whole UI story. On PC it means opening a menu
+	drops the player out of VR and closing it does the same in reverse, and that
+	transition is the jarring part rather than either state.
+
+	Defaults to 0, which is exactly their behaviour. Registered in gl_rmain.c
+	alongside the other PC additions, for the reason given there.
+*/
+cvar_t vr_menu_in_world = {CVAR_SAVE, "vr_menu_in_world", "0", "keep the world in stereo behind menus and the attract demo instead of dropping to the flat screen: 0 = Team Beef's flat panel, 1 = in world"};
+
+/*
+	How much to darken the world behind an in-world menu, 0 to 1.
+
+	Team Beef wash the whole framebuffer with 75% black so that the demo behind
+	the menu is not sickening on a flat quad. Over a world that is being kept
+	that is far too much - it is the one thing the feature exists to show - but
+	none at all is too little: Quake's menu items are bare text with no plaque
+	behind them, and on a lit wall they lose their contrast. Photographed at the
+	desk on e1m1 before choosing this default.
+*/
+cvar_t vr_menu_in_world_dim = {CVAR_SAVE, "vr_menu_in_world_dim", "0.45", "how much to darken the world behind an in-world menu, 0 = not at all, 1 = black. Only used when vr_menu_in_world is on"};
+
+// cl_video.h is not reached from quakedef.h, and this is the only thing needed
+// from it: true while a logo movie or cutscene is playing.
+extern int cl_videoplaying;
+
+/*
+	True when the in-world treatment applies at all: the feature is on, a
+	session is live, there is a world to render, and no cinematic is playing.
+
+	cls.signon is the test that matters. SCR_DrawScreen only calls R_RenderView
+	at SIGNONS, so below that there is genuinely nothing behind the 2D and the
+	flat panel is the only thing that could be shown.
+
+	The attract demo qualifies. It is demo playback of real geometry, rendered
+	live every frame, so it can keep the projection layer like anything else -
+	only the startup logo movie is a film, and cl_videoplaying excludes it.
+*/
+/*
+	The half of the test that does not ask whether a world exists yet.
+
+	Split out because the demo needs it: its angles have to stop reaching
+	cl.viewangles from the very first frame of playback, before the connection
+	completes, or the value the anchor is measured against is the recording
+	itself and the anchor cancels to zero.
+*/
+static qboolean VR_InWorldFeatureOn(void)
+{
+	return (vr_active && vr_menu_in_world.integer && !cl_videoplaying);
+}
+
+qboolean VR_InWorldEligible(void)
+{
+	return VR_InWorldFeatureOn() && (cls.signon == SIGNONS);
+}
+
+/*
+	True while a menu is being drawn over a world that is being kept. The menu's
+	per-eye offset, the skipped screen dim and the hidden viewmodel all hang off
+	this rather than each testing the menu state for themselves.
+*/
+qboolean VR_MenuInWorld(void)
+{
+	return VR_InWorldEligible() && bigScreen != 0 && !key_consoleactive;
 }
 
 bool VR_UseScreenLayer(void)
@@ -105,7 +177,125 @@ bool VR_UseScreenLayer(void)
 	if (!vr_active)
 		return true;
 
+	/*
+		Deliberately wider than VR_MenuInWorld(): the demo keeps the projection
+		layer whether or not the menu is open, so opening it does not flip the
+		whole scene between a flat quad and stereo.
+
+		The console is left out and stays on the flat panel. It is a wall of text
+		that wants to be read, which is what the flat panel is good at, and it is
+		not what this is for.
+	*/
+	if (VR_InWorldEligible() && !key_consoleactive)
+		return false;
+
 	return (bigScreen != 0 || cls.demoplayback || key_consoleactive);
+}
+
+/*
+	Which way the player faces inside the attract demo.
+
+	Handing the recording's orientation to the head is what stops the world
+	riding it, but the head's yaw is absolute - so where the player happens to be
+	physically facing would decide which way they face in the demo, and there is
+	nothing tying that to the direction the recording travels.
+
+	The offset is anchored once per demo as the recorded yaw minus the live one,
+	which makes them start facing where the recording faces wherever they are
+	standing, and then holds while the recording turns away from it.
+
+	Reset by CL_PlayDemo_f rather than here, because between the demos of the
+	attract loop this is not called at all: the client disconnects, cls.signon
+	drops below SIGNONS and the demo block in CL_LerpPlayer stops running.
+*/
+static float s_demoYaw = 0.0f;
+static qboolean s_demoAnchored = false;
+
+qboolean VR_DemoAnglesFromHead(void)
+{
+	// Deliberately not VR_InWorldEligible(): see VR_InWorldFeatureOn.
+	return cls.demoplayback && VR_InWorldFeatureOn();
+}
+
+float VR_GetDemoYaw(void)
+{
+	return s_demoYaw;
+}
+
+void VR_ResetDemoYaw(void)
+{
+	s_demoAnchored = false;
+	s_demoYaw = 0.0f;
+}
+
+void VR_UpdateDemoYaw(float recordedYaw, qboolean recordedValid)
+{
+	if (!VR_DemoAnglesFromHead())
+	{
+		VR_ResetDemoYaw();
+		return;
+	}
+
+	/*
+		Not until the connection is complete AND the recording has produced a
+		real angle - recordedValid is the caller's word that two different
+		samples have been seen. The sibling Quake II port needed the same guard,
+		there spelled cl.frame.valid: anchor on one of the opening frames and the
+		offset is measured against an angle that does not mean anything yet.
+	*/
+	if (cls.signon != SIGNONS || !recordedValid || s_demoAnchored)
+		return;
+
+	s_demoAnchored = true;
+
+	/*
+		Against the head rather than cl.viewangles. The demo stream's own
+		svc_setangle writes cl.viewangles directly, after the head has written it
+		for that frame, so anchoring against it can measure the recording against
+		itself and cancel to nothing. The head is the reference the view will
+		actually be driven from for the rest of the demo.
+	*/
+	s_demoYaw = recordedYaw - hmdorientation[YAW];
+
+	while (s_demoYaw > 180.0f)
+		s_demoYaw -= 360.0f;
+	while (s_demoYaw < -180.0f)
+		s_demoYaw += 360.0f;
+}
+
+/*
+	True when the held weapon must not be drawn.
+
+	While a menu is up the gameplay half of the input handler does not run - it
+	is the else branch of their bigScreen test - so weaponOffset freezes where it
+	was. On the flat quad that never showed, because the world was not being
+	rendered; over a live world the stale gun rides welded to the face. In a demo
+	the held weapon belongs to the recording rather than to the player's hands,
+	and it is aimed by a pose nobody is holding.
+*/
+qboolean VR_HideViewModel(void)
+{
+	return VR_MenuInWorld() || VR_DemoAnglesFromHead();
+}
+
+/*
+	Horizontal extent of this eye's frustum, in tangent units.
+
+	2D is drawn across the whole eye buffer, so console x maps linearly onto this
+	span - which is what turns a lateral shift in metres into console units.
+*/
+qboolean VR_GetEyeTangentWidth(int eye, float *width)
+{
+	if (!VR_EyeViewsValid())
+		return false;
+
+	{
+		const XrFovf fov = gAppState.Projections[eye].fov;
+
+		*width = tanf(fov.angleRight) - tanf(fov.angleLeft);
+	}
+
+	return (*width > 0.0001f);
 }
 
 float VR_GetScreenLayerDistance(void)
@@ -589,9 +779,16 @@ void VR_MainLoop(void)
 
 		TBXR_FrameSetup();
 
-		// Their comment: if showing the menu, don't pass head orientation
-		// through - the big screen stays put while you look around it.
-		if (m_state == m_none)
+		/*
+			Their comment: if showing the menu, don't pass head orientation
+			through - the big screen stays put while you look around it.
+
+			With the world kept behind the menu there is a world to look at, so
+			the head has to keep driving the view or it freezes mid-scene while
+			the player turns. Asking VR_UseScreenLayer() rather than testing the
+			menu again keeps the two answers from ever disagreeing.
+		*/
+		if (m_state == m_none || !VR_UseScreenLayer())
 			QC_MoveEvent(hmdorientation[YAW], hmdorientation[PITCH], hmdorientation[ROLL]);
 		else
 			QC_MoveEvent(0, 0, 0);

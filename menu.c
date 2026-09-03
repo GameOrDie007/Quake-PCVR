@@ -56,6 +56,8 @@ extern cvar_t cl_trackingmode;
 extern cvar_t bullettime;
 
 extern void BigScreenMode(int mode);
+qboolean VR_MenuInWorld(void);
+extern cvar_t vr_menu_in_world_dim;
 
 //Record yaw at the moment the menu is invoked
 static float hmdYaw = 0;
@@ -207,9 +209,19 @@ static void M_Background(int width, int height)
 	menu_x = (vid_conwidth.integer - menu_width) * 0.5;
 	menu_y = (vid_conheight.integer - menu_height) * 0.5;
 
-	//Make the background barely visible when menu active.. this should avoid people
-	//throwing up while the demo is running!
-	DrawQ_Fill(0, 0, vid_conwidth.integer, vid_conheight.integer, 0, 0, 0, 0.75, 0);
+	/*
+		Theirs: a 75% black wash over the whole framebuffer, so that the demo
+		behind the menu is not sickening on a flat quad.
+
+		Over a world that is being kept that is far too heavy - the world is the
+		one thing the feature exists to show - but none at all is too light.
+		Unlike the sibling Quake II port, Quake's menu items are bare text with
+		nothing behind them, so on a lit wall they lose their contrast against
+		it. vr_menu_in_world_dim is the middle ground and is a matter of taste,
+		hence a cvar rather than a constant.
+	*/
+	DrawQ_Fill(0, 0, vid_conwidth.integer, vid_conheight.integer, 0, 0, 0,
+			VR_MenuInWorld() ? bound(0.0f, vr_menu_in_world_dim.value, 1.0f) : 0.75f, 0);
 }
 
 /*
@@ -3448,7 +3460,7 @@ static void M_Menu_GameSelect_Key (int key, int ascii)
 	Tegra's Z-buffer - a mobile concession that costs correctness on PC.
 */
 
-#define PCOPTIONS_ITEMS 7
+#define PCOPTIONS_ITEMS 9
 
 static int pcoptions_cursor;
 
@@ -3459,6 +3471,7 @@ extern cvar_t r_polygonoffset_submodel_offset;
 extern cvar_t vr_hud_height;
 extern cvar_t vr_mirror;
 extern cvar_t vr_quicksave;
+extern cvar_t vr_menu_in_world;
 
 void M_Menu_PCOptions_f (void)
 {
@@ -3517,6 +3530,16 @@ static void M_Menu_PCOptions_Draw (void)
 	else
 		M_Options_PrintCommand("      Left X and Y:  Y opens text input", true);
 
+	// Not one of theirs: on the Quest every menu is a flat panel by design, so
+	// the default is Team Beef's and this is opt-in.
+	if (vr_menu_in_world.integer)
+		M_Options_PrintCommand("       Menus in world:  On", true);
+	else
+		M_Options_PrintCommand("       Menus in world:  Flat screen", true);
+
+	M_Options_PrintSlider(  "        World dimming", vr_menu_in_world.integer,
+			vr_menu_in_world_dim.value, 0, 1);
+
 	M_Options_PrintCommand(" ", true);
 
 	// vid.width and vid.height are the eye buffer in VR, which is the figure
@@ -3564,6 +3587,10 @@ static void M_Menu_PCOptions_Key (int key, int ascii)
 			Cvar_SetValueQuick(&vr_mirror, (vr_mirror.integer + 2) % 3);
 		else if (pcoptions_cursor == 6)
 			Cvar_SetValueQuick(&vr_quicksave, 1 - vr_quicksave.integer);
+		else if (pcoptions_cursor == 7)
+			Cvar_SetValueQuick(&vr_menu_in_world, 1 - vr_menu_in_world.integer);
+		else if (pcoptions_cursor == 8)
+			Cvar_SetValueQuick(&vr_menu_in_world_dim, bound(0.0f, vr_menu_in_world_dim.value - 0.05f, 1.0f));
 		break;
 
 	case 'd':
@@ -3585,6 +3612,10 @@ static void M_Menu_PCOptions_Key (int key, int ascii)
 			Cvar_SetValueQuick(&vr_mirror, (vr_mirror.integer + 1) % 3);
 		else if (pcoptions_cursor == 6)
 			Cvar_SetValueQuick(&vr_quicksave, 1 - vr_quicksave.integer);
+		else if (pcoptions_cursor == 7)
+			Cvar_SetValueQuick(&vr_menu_in_world, 1 - vr_menu_in_world.integer);
+		else if (pcoptions_cursor == 8)
+			Cvar_SetValueQuick(&vr_menu_in_world_dim, bound(0.0f, vr_menu_in_world_dim.value + 0.05f, 1.0f));
 		break;
 	}
 }

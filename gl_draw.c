@@ -1128,9 +1128,34 @@ void DrawQ_ProcessDrawFlag(int flags, qboolean alpha)
 	}
 }
 
+/*
+	Per-eye horizontal shift applied to every 2D primitive below.
+
+	Menu code in this engine applies no per-eye offset anywhere, because it never
+	needed one - menus always lived on the flat quad, where both eyes see a
+	single image. Drawn into both eye buffers at identical coordinates a menu
+	will not fuse.
+
+	There is nowhere to thread a parameter through: MR_Draw() takes none and the
+	drawing is spread across the whole of menu.c. So the shift lives here, is set
+	immediately before the menu is drawn and zeroed immediately after. Zero
+	everywhere else, including the whole flatscreen build.
+
+	The HUD does not use this. It threads its own offset through as a parameter
+	at a handful of call sites, and it sits at a different depth besides.
+*/
+static float drawq_stereo_offset = 0.0f;
+
+void DrawQ_SetStereoOffset(float offset)
+{
+	drawq_stereo_offset = offset;
+}
+
 void DrawQ_Pic(float x, float y, cachepic_t *pic, float width, float height, float red, float green, float blue, float alpha, int flags)
 {
 	float floats[36];
+
+	x += drawq_stereo_offset;
 
 	_DrawQ_SetupAndProcessDrawFlag(flags, pic, alpha);
 	if(!r_draw2d.integer && !r_draw2d_force)
@@ -1189,6 +1214,8 @@ void DrawQ_RotPic(float x, float y, cachepic_t *pic, float width, float height, 
 	float sinar = sin(ar);
 	float cosar = cos(ar);
 
+	x += drawq_stereo_offset;
+
 	_DrawQ_SetupAndProcessDrawFlag(flags, pic, alpha);
 	if(!r_draw2d.integer && !r_draw2d_force)
 		return;
@@ -1239,6 +1266,8 @@ void DrawQ_RotPic(float x, float y, cachepic_t *pic, float width, float height, 
 void DrawQ_Fill(float x, float y, float width, float height, float red, float green, float blue, float alpha, int flags)
 {
 	float floats[36];
+
+	x += drawq_stereo_offset;
 
 	_DrawQ_SetupAndProcessDrawFlag(flags, NULL, alpha);
 	if(!r_draw2d.integer && !r_draw2d_force)
@@ -1537,6 +1566,12 @@ float DrawQ_String_Scale(float startx, float starty, const char *text, size_t ma
 	tw = R_TextureWidth(fnt->tex);
 	th = R_TextureHeight(fnt->tex);
 
+	// Applied here and removed again from both returns, so a caller that chains
+	// from the returned x - the console and the notify area both do - keeps
+	// working in unshifted coordinates.
+	startx += drawq_stereo_offset;
+	x = startx;
+
 	if (!h) h = w;
 	if (!h) {
 		h = w = 1;
@@ -1568,7 +1603,7 @@ float DrawQ_String_Scale(float startx, float starty, const char *text, size_t ma
 
 	_DrawQ_SetupAndProcessDrawFlag(flags, NULL, 0);
 	if(!r_draw2d.integer && !r_draw2d_force)
-		return startx + DrawQ_TextWidth_UntilWidth_TrackColors_Scale(text, &maxlen, w, h, sw, sh, NULL, ignorecolorcodes, fnt, 1000000000);
+		return startx - drawq_stereo_offset + DrawQ_TextWidth_UntilWidth_TrackColors_Scale(text, &maxlen, w, h, sw, sh, NULL, ignorecolorcodes, fnt, 1000000000);
 
 //	R_Mesh_ResetTextureState();
 	if (!fontmap)
@@ -1854,7 +1889,7 @@ out:
 		*outcolor = colorindex;
 	
 	// note: this relies on the proper text (not shadow) being drawn last
-	return x;
+	return x - drawq_stereo_offset;
 }
 
 float DrawQ_String(float startx, float starty, const char *text, size_t maxlen, float w, float h, float basered, float basegreen, float baseblue, float basealpha, int flags, int *outcolor, qboolean ignorecolorcodes, const dp_font_t *fnt)
@@ -1920,6 +1955,8 @@ static int DrawQ_BuildColoredText(char *output2c, size_t maxoutchars, const char
 void DrawQ_SuperPic(float x, float y, cachepic_t *pic, float width, float height, float s1, float t1, float r1, float g1, float b1, float a1, float s2, float t2, float r2, float g2, float b2, float a2, float s3, float t3, float r3, float g3, float b3, float a3, float s4, float t4, float r4, float g4, float b4, float a4, int flags)
 {
 	float floats[36];
+
+	x += drawq_stereo_offset;
 
 	_DrawQ_SetupAndProcessDrawFlag(flags, pic, a1*a2*a3*a4);
 	if(!r_draw2d.integer && !r_draw2d_force)
@@ -2018,6 +2055,9 @@ void DrawQ_LineLoop (drawqueuemesh_t *mesh, int flags)
 //[515]: this is old, delete
 void DrawQ_Line (float width, float x1, float y1, float x2, float y2, float r, float g, float b, float alpha, int flags)
 {
+	x1 += drawq_stereo_offset;
+	x2 += drawq_stereo_offset;
+
 	_DrawQ_SetupAndProcessDrawFlag(flags, NULL, alpha);
 	if(!r_draw2d.integer && !r_draw2d_force)
 		return;
@@ -2107,6 +2147,9 @@ void DrawQ_SetClipArea(float x, float y, float width, float height)
 {
 	int ix, iy, iw, ih;
 	_DrawQ_Setup();
+
+	// The clip rectangle has to travel with what it clips.
+	x += drawq_stereo_offset;
 
 	// We have to convert the con coords into real coords
 	// OGL uses top to bottom
