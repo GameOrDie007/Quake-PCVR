@@ -13,6 +13,99 @@ in this repository. Everything said about them is still worth reading: the
 
 ---
 
+# Menus and the attract demo, kept in the world
+
+The sibling Quake II port grew this in September 2026 and it was wanted here.
+The design carries over; almost nothing else does. DarkPlaces is a different
+engine from yquake2, so every site was traced rather than ported, and three of
+the six landed somewhere quite different.
+
+| Quake II | Here |
+|---|---|
+| `useScreenLayer()` on `key_dest != key_game` | `VR_UseScreenLayer()` on `bigScreen \|\| cls.demoplayback \|\| key_consoleactive` |
+| weapon pose frozen in the menu branch | the same trap, six `bigScreen != 0` sites in `vr_game.c` |
+| `CL_PredictMovement` early-returns while paused | **no equivalent** — `V_CalcRefdef` reads `cl.viewangles` directly. The head is cut off further upstream instead, by their `QC_MoveEvent(0,0,0)` |
+| a per-eye 2D offset had to be built | **half-built already** — `GetHUDOffset` and `VR_GetOffCenterFov` exist, but only the HUD uses them, at four hand-written call sites |
+| demo angles owned by `PM_FREEZE` | `CL_LerpPlayer` overwrites `cl.viewangles` from `cl.mviewangles[]` |
+
+Two things were free here that cost work there. All 2D already draws per eye,
+because `SCR_DrawScreen` runs inside the eye loop via `Host_Frame(eye, x, y)`,
+so the menu lands in both eye buffers as soon as the projection layer is kept.
+And Quake auto-pauses a local game when a menu opens, so the frozen-but-lit
+world comes for nothing.
+
+## The offset, derived rather than tuned
+
+2D is drawn across the whole eye buffer, so console x maps linearly onto the
+eye's frustum: `vid_conwidth` console units span `tanRight - tanLeft` tangent
+units. A plane at distance D needs each eye displaced by half the IPD, a
+tangent shift of `(IPD/2)/D`. So the console shift is
+
+    (IPD/2) / D / (tanRight - tanLeft) * vid_conwidth
+
+The reason to believe it: solving it for the HUD's own hardcoded 20 console
+units gives D ≈ 0.44 m. That is arm's length, and it is what the Quake II port
+independently hangs its HUD at. Two numbers chosen for different reasons
+agreeing is worth more than a constant that looks about right.
+
+`MR_Draw()` takes no arguments and the menu drawing is spread over the whole of
+`menu.c`, so there was nowhere to thread a parameter. The shift lives in the
+`DrawQ_` primitives, set immediately before the menu and zeroed immediately
+after.
+
+## The 75% wash is not simply dropped
+
+Quake II skips its screen fade entirely when the world is live, and the menu
+stays readable there because its items sit on opaque plaques. **Quake's do
+not** — they are bare text. Photographed at four values on e1m1: at 0 the
+middle items fight the brick wall badly; 0.45 reads cleanly with the world
+still plainly visible; 0.6 is legible but is losing the point. `0.45` is the
+default and `vr_menu_in_world_dim` is the knob.
+
+## What the desk could prove without a headset
+
+* **Nothing bypasses the offset.** A forced 40-unit shift moves the side
+  plaque, the id logo, the MAIN banner, all five items and the cursor, and
+  moves neither the world nor the HUD. Correlating the menu's column profile
+  against the unshifted shot peaks cleanly at 50 px — 40 console units at
+  800/640 — and falls away either side.
+* **The weapon is hidden.** Drawn with the menu shut, gone with it open.
+* **The demo answers the head.** The rendered yaw holds at the head's value
+  while the recording swings from 301° to −4°; before the change it tracked the
+  recording degree for degree. Turning moves the render with it, offset by the
+  anchor, so the player can look anywhere on the way past.
+* **Nothing changed with the feature off.** Against the shipped binary,
+  menu-over-map and in-game are pixel-identical. The demo and the console
+  differ — but *less than the shipped binary differs from itself* on those same
+  scenes, neither of which reproduces frame for frame. That control is the only
+  reason the demo's 353,567 differing pixels are readable as noise rather than
+  as a regression.
+
+## Two wrong answers on the way, both from guessing instead of instrumenting
+
+The demo's facing offset measured 0.00 when it should have aimed the player
+down the demo's route. Twice I formed a theory from the symptom and patched it,
+and twice the number did not move. Probing inside the function itself gave the
+answer in one run: it had anchored on a frame where the recording and the view
+angle were both −90°, so the subtraction was legitimately zero.
+
+The real defect it exposed is worth keeping: **the demo stream's own
+`svc_setangle` writes `cl.viewangles` directly**, after the head has written it
+for that frame. Anchoring "recorded minus current view" can therefore measure
+the recording against itself and cancel to nothing. It now anchors against
+`hmdorientation`, which is the reference the view is actually driven from.
+
+## Not verified
+
+Everything needing a headset: whether the menu fuses at the screen plane, how
+the demo feels, and whether the anchor aims where it should once
+`hmdorientation` is real rather than the flatscreen zero. A one-off
+`Con_DPrintf` on the first in-world menu of a session records the convergence,
+the off-centre offset and the IPD, so the first headset run puts real numbers
+against the derivation above.
+
+---
+
 # The X button was shipping a debug cheat
 
 Reported by a player on Discord: the left X button gives all weapons and ammo,

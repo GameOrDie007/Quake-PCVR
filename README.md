@@ -44,6 +44,34 @@ What this build adds on top:
 * **A desktop mirror worth streaming** — borderless full screen by default,
   Alt+Enter to windowed and back, resizable, and cropped to the shape of the
   window rather than squashed into it.
+* **Menus and the attract demo in the world**, off by default — see below.
+
+### Menus in the world
+
+On the Quest every menu is a flat panel, because a headset-only device has
+nowhere else to put one. On PC that means opening a menu drops you out of VR
+and closing it puts you back, and the flipping between the two is the jarring
+part rather than either state.
+
+**PC Options → Menus in world** keeps the world in stereo behind a menu
+instead. The world stays lit and stays where it is, the head still moves the
+view, and the menu is drawn into both eyes at the depth the flat panel used to
+hang at. The attract demo behind the first menu keeps the world too — and
+because its recorded angles would otherwise turn your head for you, the
+recording keeps only its path while **you** own where you are looking.
+
+Two things worth knowing before you turn it on:
+
+* **A camera that moves you without your input is a comfort risk.** The demo
+  carries you along its route. Taking its turning away removes the worst of it,
+  but if it does not agree with you, turn the setting off.
+* **World dimming** on the same page controls how much the world behind a menu
+  is darkened, because Quake's menu items are bare text with nothing behind
+  them and can lose their contrast against a lit wall. It starts at 0.45; Team
+  Beef's flat panel uses the equivalent of 0.75.
+
+The console is deliberately left on the flat panel, where a wall of text is
+easier to read.
 
 `PROGRESS.md` is the development log, and it is unusually complete: how the
 base commit was identified by hashing 212 engine files against upstream
