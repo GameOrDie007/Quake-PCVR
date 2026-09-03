@@ -49,6 +49,29 @@ void BigScreenMode(int mode);
 bool VR_UseScreenLayer(void);
 float VR_GetScreenLayerDistance(void);
 
+// PC addition, behind vr_menu_in_world: keep the world in stereo behind a menu
+// or the attract demo instead of collapsing it onto the flat quad.
+//
+// VR_InWorldEligible is the shared half - feature on, session live, a world at
+// SIGNONS, no cinematic - without asking what the menu is doing.
+// VR_MenuInWorld is that plus a menu, and is what the menu's per-eye offset and
+// its skipped screen dim hang off.
+qboolean VR_InWorldEligible(void);
+qboolean VR_MenuInWorld(void);
+qboolean VR_HideViewModel(void);
+
+// The attract demo. The recording keeps the position and the head owns the
+// orientation, with one anchored offset so the player starts out facing the way
+// the recording travels. Reset when a demo starts, anchored on its first frame.
+qboolean VR_DemoAnglesFromHead(void);
+float VR_GetDemoYaw(void);
+void VR_ResetDemoYaw(void);
+void VR_UpdateDemoYaw(float recordedYaw, qboolean recordedValid);
+
+// Horizontal extent of an eye's frustum in tangent units, which is what turns a
+// lateral shift in metres into console units. See GetStereoConvergenceOffset.
+qboolean VR_GetEyeTangentWidth(int eye, float *width);
+
 // Vertical field of view in degrees, and the server tick rate, both of which
 // follow the headset in VR and so replaced the fov and sys_ticrate cvars.
 float GetFOV(void);

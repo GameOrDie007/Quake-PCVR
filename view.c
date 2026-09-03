@@ -1000,18 +1000,35 @@ void V_CalcRefdefUsing (const matrix4x4_t *entrendermatrix, const vec3_t clviewa
 	cl.calcrefdef_prevtime = cl.time;
 }
 
+// The VR layer, declared here rather than included so this file need not pull
+// in the OpenXR and Win32 headers. See vr_pc.h.
+qboolean VR_DemoAnglesFromHead(void);
+float VR_GetDemoYaw(void);
+
 void V_CalcRefdef (void)
 {
 	entity_t *ent;
 	qboolean cldead;
+	vec3_t viewangles;
 
 	if (cls.state == ca_connected && cls.signon == SIGNONS && !cl.csqc_server2csqcentitynumber[cl.viewentity])
 	{
 		// ent is the view entity (visible when out of body)
 		ent = &cl.entities[cl.viewentity];
 
+		VectorCopy(cl.viewangles, viewangles);
+
+		/*
+			The attract demo's own facing, added here rather than to
+			cl.viewangles so that it cannot compound: vr_yawmode 1 and 2 both
+			accumulate into cl.viewangles, and an offset added there every frame
+			would drift away instead of holding.
+		*/
+		if (VR_DemoAnglesFromHead())
+			viewangles[YAW] += VR_GetDemoYaw();
+
 		cldead = (cl.stats[STAT_HEALTH] <= 0 && cl.stats[STAT_HEALTH] != -666 && cl.stats[STAT_HEALTH] != -2342);
-		V_CalcRefdefUsing(&ent->render.matrix, cl.viewangles, !ent->persistent.trail_allowed, cl.onground, cl.cmd.jump, cl.stats[STAT_VIEWHEIGHT], cldead, false, cl.velocity); // FIXME use a better way to detect teleport/warp than trail_allowed
+		V_CalcRefdefUsing(&ent->render.matrix, viewangles, !ent->persistent.trail_allowed, cl.onground, cl.cmd.jump, cl.stats[STAT_VIEWHEIGHT], cldead, false, cl.velocity); // FIXME use a better way to detect teleport/warp than trail_allowed
 	}
 	else
 	{

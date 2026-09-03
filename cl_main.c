@@ -92,6 +92,12 @@ cvar_t cl_prydoncursor_notrace = {0, "cl_prydoncursor_notrace", "0", "disables t
 
 cvar_t cl_deathnoviewmodel = {0, "cl_deathnoviewmodel", "1", "hides gun model when dead"};
 
+// The VR layer, declared here rather than included so this file need not pull
+// in the OpenXR and Win32 headers. See vr_pc.h.
+qboolean VR_DemoAnglesFromHead(void);
+qboolean VR_HideViewModel(void);
+void VR_UpdateDemoYaw(float recordedYaw, qboolean recordedValid);
+
 cvar_t cl_locs_enable = {CVAR_SAVE, "locs_enable", "1", "enables replacement of certain % codes in chat messages: %l (location), %d (last death location), %h (health), %a (armor), %x (rockets), %c (cells), %r (rocket launcher status), %p (powerup status), %w (weapon status), %t (current time in level)"};
 cvar_t cl_locs_show = {0, "locs_show", "0", "shows defined locations for editing purposes"};
 
@@ -1373,6 +1379,8 @@ static void CL_UpdateViewModel(void)
 		ent->state_current.modelindex = 0;
 	else if (weaponwheel_active)
 		ent->state_current.modelindex = 0;	// the wheel replaces the held weapon
+	else if (VR_HideViewModel())
+		ent->state_current.modelindex = 0;	// stale behind a menu, not the player's in a demo
 	else if (cl.stats[STAT_ITEMS] & IT_INVISIBILITY)
 	{
 		if (gamemode == GAME_TRANSFUSION)
@@ -1925,6 +1933,8 @@ static void CL_LerpPlayer(float frac)
 	// interpolate the angles if playing a demo or spectating someone
 	if (cls.demoplayback || cl.fixangle[0])
 	{
+		vec3_t recorded;
+
 		for (i = 0;i < 3;i++)
 		{
 			float d = cl.mviewangles[0][i] - cl.mviewangles[1][i];
@@ -1932,8 +1942,34 @@ static void CL_LerpPlayer(float frac)
 				d -= 360;
 			else if (d < -180)
 				d += 360;
-			cl.viewangles[i] = cl.mviewangles[1][i] + frac * d;
+			recorded[i] = cl.mviewangles[1][i] + frac * d;
 		}
+
+		/*
+			A demo kept in the world is a real map being rendered, not a film -
+			but its recorded angles own the view completely, and the scene is
+			then submitted on a projection layer posed at the head. The
+			compositor therefore presents it as though it had been drawn from
+			where the head is, and the whole world turns with the player. That is
+			the whole of why an attract demo feels strapped to the face.
+
+			So while it is in the world the recording keeps only the position and
+			the head owns the orientation: carried along the path, free to look
+			anywhere. Pitch and roll come from the head as well, because an
+			imposed horizon is worse than an imposed yaw, and dropping the
+			recording's own turning removes the part most likely to make somebody
+			ill.
+
+			Backing it out is one line: delete the test and always copy.
+		*/
+		// The recording counts as real once it has produced two different
+		// samples; before that its angles are not yet meaningful and would
+		// anchor the player facing an arbitrary direction.
+		VR_UpdateDemoYaw(recorded[YAW],
+				!VectorCompare(cl.mviewangles[0], cl.mviewangles[1]));
+
+		if (!VR_DemoAnglesFromHead())
+			VectorCopy(recorded, cl.viewangles);
 	}
 }
 

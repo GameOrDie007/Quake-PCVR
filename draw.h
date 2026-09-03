@@ -194,6 +194,11 @@ void DrawQ_Lines(float width, int numlines, int flags, qboolean hasalpha);
 void DrawQ_LineLoop(drawqueuemesh_t *mesh, int flags);
 // resets r_refdef.draw2dstage
 void DrawQ_Finish(void);
+
+// Per-eye horizontal shift for the 2D primitives, in console units. Set it
+// around a block of drawing and zero it again; see MR_Draw()'s call site in
+// cl_screen.c. Zero except while a menu is drawn into the world in VR.
+void DrawQ_SetStereoOffset(float offset);
 void DrawQ_ProcessDrawFlag(int flags, qboolean alpha); // sets GL_DepthMask and GL_BlendFunc
 void DrawQ_RecalcView(void); // use this when changing r_refdef.view.* from e.g. csqc
 
