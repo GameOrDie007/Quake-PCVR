@@ -13,6 +13,55 @@ in this repository. Everything said about them is still worth reading: the
 
 ---
 
+# The Mods browser no longer drops out of VR
+
+The one remaining fixable item on the known-issues list. Enabling a mod ended in
+`FS_ChangeGameDirs`, which finishes with a `vid_restart`; that destroys the GL
+context the OpenXR swapchain images belong to, and nothing brought the session
+back. To the player it looked like a crash rather than a consequence.
+
+The fix was already in the tree. The Single Player game list has never had this
+problem because it does not change gamedir at all - it rebuilds the command
+line, starts a new process and quits, and `Host_RelaunchGame_f` in `sys_sdl.c`
+is the machinery. `ModList_Enable` now takes the same route when a session is
+live, and is unchanged on flatscreen.
+
+Two details made it fit:
+
+* **DarkPlaces takes `-game` more than once and keeps the order**, so the whole
+  enabled stack survives rather than only the first entry.
+* With nothing enabled the command carries no `-game` at all, which relaunches
+  into the base game - the right answer for turning every mod off.
+
+The relaunch builder also now quotes the selection it appends, as it already did
+for the arguments it inherits, because a mod directory may contain a space and
+would otherwise arrive as two arguments.
+
+Checked at the desk by making the relaunch print its command line and stop,
+and by driving `ModList_Enable` directly:
+
+    two mods  -> ... -game hipnotic -game dopa -relaunchwait 37884 -spmenu
+    none      -> ... -relaunchwait 42120 -spmenu
+    stale -game rogue on the old command line was dropped in both cases
+    flatscreen unchanged: "Game is Darkplaces-Hipnotic ... mod gamedirs hipnotic"
+
+Not verified in a headset, but the hop that is new here is only the command
+string; the relaunch itself is the path the game list has used since release.
+
+## Two console commands that were registered on top of each other
+
+Noticed while looking for a way to drive the mod list from a script. The engine
+printed `Cmd_AddCommand: menu_reset already defined` and the same for
+`menu_pcoptions` at every startup, and one of them cost something real: the
+controller page had been registered as a *second* `menu_reset`, so the
+registration was refused and **it had no console command at all**. It was still
+reachable from the Options menu, which is why nobody noticed.
+
+It is `menu_controller` now, and the duplicate `menu_pcoptions` is gone. Both
+startup warnings with it.
+
+---
+
 # Menus and the attract demo, kept in the world
 
 The sibling Quake II port grew this in September 2026 and it was wanted here.

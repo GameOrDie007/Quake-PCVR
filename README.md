@@ -172,10 +172,6 @@ messages show their internal names; everything still runs.
 
 ## Known issues
 
-* **The in-game Mods browser drops out of VR.** Changing gamedir ends in
-  `vid_restart`, which destroys the GL context the OpenXR swapchain images
-  belong to, and nothing restarts the session. Use the Single Player game list
-  instead — it relaunches the process, which is why it works.
 * **Sixteen messages in the MachineGames episodes** show a readable placeholder
   rather than their real wording. Their text exists only inside the re-release's
   own engine, in neither the paks nor its data files. Everything else, including

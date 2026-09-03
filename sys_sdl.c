@@ -252,11 +252,22 @@ void Host_RelaunchGame_f (void)
 			strlcat(cmdline, a, sizeof(cmdline));
 	}
 
-	// The new selection, already in command line form.
+	// The new selection, already in command line form. Quoted the same way as
+	// the inherited arguments above, because a mod directory may contain a
+	// space and would otherwise arrive as two arguments.
 	for (i = 1; i < Cmd_Argc(); i++)
 	{
+		const char *a = Cmd_Argv(i);
+
 		strlcat(cmdline, " ", sizeof(cmdline));
-		strlcat(cmdline, Cmd_Argv(i), sizeof(cmdline));
+		if (strchr(a, ' '))
+		{
+			strlcat(cmdline, "\"", sizeof(cmdline));
+			strlcat(cmdline, a, sizeof(cmdline));
+			strlcat(cmdline, "\"", sizeof(cmdline));
+		}
+		else
+			strlcat(cmdline, a, sizeof(cmdline));
 	}
 
 	// The runtime will not hand the new instance a session while this one
@@ -265,8 +276,9 @@ void Host_RelaunchGame_f (void)
 	dpsnprintf(pidarg, sizeof(pidarg), " -relaunchwait %u", (unsigned)GetCurrentProcessId());
 	strlcat(cmdline, pidarg, sizeof(cmdline));
 
-	// Every relaunch comes from the game list, so the new instance opens on
-	// the page the player was heading for rather than the credits.
+	// Relaunches come from the game list and from the mod browser, and in both
+	// cases the player has just chosen something to play, so the new instance
+	// opens on Single Player rather than on the credits.
 	strlcat(cmdline, " -spmenu", sizeof(cmdline));
 
 	memset(&si, 0, sizeof(si));
