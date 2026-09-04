@@ -137,6 +137,86 @@ its own engine in several places. Making them work took four engine fixes —
 see `PROGRESS.md` if you are curious, it is the most interesting part of the
 port.
 
+## Mods
+
+The port ships **no mods and no mod data**, and it never will — see the licence
+section. What it has is a working mods browser: **Options → Browse Mods**, tick
+one, and the game restarts into it with VR intact. (It relaunches rather than
+switching in place, because changing game directory tears down the graphics
+context the headset session belongs to.)
+
+### Installing one by hand
+
+A Quake mod is a folder of its own sitting next to `id1`. So:
+
+1. Download the mod.
+2. Unzip it so that its folder lands beside `id1` in the install directory —
+   `Quake VR (PC)\rubicon2\`, for example, containing that mod's own
+   `pak0.pak`, or its `progs.dat` and `maps/`.
+3. Start the game, **Options → Browse Mods**, tick it.
+
+Two things that trip people up. Some archives already contain the mod's folder
+and some do not, so check whether you are creating one level too many or too
+few — the browser only lists a folder if it actually holds Quake content. And
+the folder name matters: it is what the mod's own documentation calls it, and
+what the table below lists.
+
+**[Quake Injector](https://www.quaddicted.com/tools/quake_injector) does all of
+this for you** against the Quaddicted archive, and is worth having if you intend
+to play more than a couple. Point it at this install directory.
+
+### Reported working
+
+From a Team Beef Discord post of 13 August 2026 listing what runs on
+**QuakeQuest**, the Quest build this port is derived from. **None of these have
+been tested on the PC port** — they are listed because the game code is Team
+Beef's unchanged, so what runs there should run here, not because anyone has
+checked.
+
+| mod | folder |
+|---|---|
+| Beyond Belief | `bblief` |
+| Capture the Flag | `ctf` |
+| Block Quake | `blockquake` |
+| Contract | `contract` |
+| Liber Quake | `Lq1` |
+| Malice | `MALICE` |
+| 30th anniversary maps | `mc_q30th_jam` |
+| Quake 1.5 | `quake15` |
+| Rubicon | `rubicon` |
+| Rubicon 2 | `rubicon2` |
+| OpenQuartz | `OpenQ` |
+| Slayer's Testaments (2019 version only) | `SlayerTest` |
+| Spirit World | `spiritworld` |
+| X-Men: The Ravages of Apocalypse | `xmen` |
+
+The mission packs and MachineGames episodes are not mods in this sense — they
+are content you already own, and `Setup.bat` handles them. See above.
+
+### Where they come from, and what you may do with them
+
+Most live at **[Quaddicted](https://www.quaddicted.com/)**, the Quake archive:
+downloads are unrestricted, need no account, and mirroring is explicitly
+encouraged. A few of the larger recent ones are on ModDB instead — Slayer's
+Testaments and Quake 1.5 among them.
+
+Three are worth knowing about before you go looking:
+
+* **Malice** was a **commercial retail release** (Quantum Axcess, 1997), later
+  sold as part of the Resurrection Pack. Copies on abandonware sites are not
+  licensed distribution.
+* **X-Men: The Ravages of Apocalypse** was also commercial in 1997, but **was
+  released as freeware in July 2006**, so it is free to download. It remains
+  Marvel-licensed material.
+* **OpenQuartz** is the odd one out: explicitly **GPL v2 content**, made to be
+  free and redistributable.
+
+**This is why none of them are bundled.** Free to download is not the same as
+free to redistribute, and almost none of these carry a redistribution licence.
+Keeping them as things you fetch yourself means their licences and this port's
+GPL never meet inside one archive — the same reason `Setup.bat` builds Quake's
+own data on your machine rather than shipping it.
+
 ## Building from source
 
 MSYS2, with the mingw64 toolchain:
