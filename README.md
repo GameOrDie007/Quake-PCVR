@@ -168,27 +168,40 @@ to play more than a couple. Point it at this install directory.
 ### Reported working
 
 From a Team Beef Discord post of 13 August 2026 listing what runs on
-**QuakeQuest**, the Quest build this port is derived from. **None of these have
-been tested on the PC port** — they are listed because the game code is Team
-Beef's unchanged, so what runs there should run here, not because anyone has
-checked.
+**QuakeQuest**, the Quest build this port is derived from. The game code is Team
+Beef's unchanged, so what runs there should run here.
 
-| mod | folder |
-|---|---|
-| Beyond Belief | `bblief` |
-| Capture the Flag | `ctf` |
-| Block Quake | `blockquake` |
-| Contract | `contract` |
-| Liber Quake | `Lq1` |
-| Malice | `MALICE` |
-| 30th anniversary maps | `mc_q30th_jam` |
-| Quake 1.5 | `quake15` |
-| Rubicon | `rubicon` |
-| Rubicon 2 | `rubicon2` |
-| OpenQuartz | `OpenQ` |
-| Slayer's Testaments (2019 version only) | `SlayerTest` |
-| Spirit World | `spiritworld` |
-| X-Men: The Ravages of Apocalypse | `xmen` |
+Seven have since been installed and loaded on the PC build — each starts its own
+map and reports its own progs CRC, so the mod's data *and* its QuakeC are both
+being used. The rest are untested here.
+
+| mod | folder | on the PC port |
+|---|---|---|
+| Beyond Belief | `bbelief` | loads |
+| Capture the Flag | `ctf` | untested |
+| Block Quake | `blockquake` | untested |
+| Contract | `contract` | loads |
+| Liber Quake | `Lq1` | untested |
+| Malice | `MALICE` | untested |
+| 30th anniversary maps | `mc_q30th_jam` | untested |
+| Quake 1.5 | `quake15` | untested |
+| Rubicon | `rubicon` | loads |
+| Rubicon 2 | `rubicon2` | loads |
+| OpenQuartz | `OpenQ` | loads |
+| Slayer's Testaments (2019 version only) | `SlayerTest` | untested |
+| Spirit World | `spiritworld` | loads |
+| X-Men: The Ravages of Apocalypse | `xmen` | loads |
+
+Two notes from installing them. **Beyond Belief's folder is `bbelief`, not
+`bblief`** — the post has a typo, and the mod's own launcher asks for
+`-game bbelief`. And **OpenQuartz is packaged as a replacement for Quake's own
+data**, so its archive puts everything in an `id1/` folder: unzip that where it
+falls and it merges into your Quake rather than installing beside it. Put its
+contents in `OpenQ/` instead.
+
+Beyond Belief prints `Cvar_Set: variable r_maxedges not found` twice on startup.
+That is its 1997 config setting software-renderer variables DarkPlaces does not
+have, and it is harmless.
 
 The mission packs and MachineGames episodes are not mods in this sense — they
 are content you already own, and `Setup.bat` handles them. See above.
