@@ -281,6 +281,46 @@ void Host_RelaunchGame_f (void)
 	// opens on Single Player rather than on the credits.
 	strlcat(cmdline, " -spmenu", sizeof(cmdline));
 
+	/*
+		Carry the VR settings across explicitly.
+
+		They are archived, but DarkPlaces writes config.cfg into the *current*
+		gamedir - so hipnotic, rogue and each MachineGames pack keep their own
+		copy, and a relaunch into one of them comes up with whatever that copy
+		says rather than what the player just chose. On top of that the loop
+		above deliberately drops every + command, which is correct for the ones
+		a launcher passed and wrong for these.
+
+		This is why switching to an expansion from the game list arrived with
+		menus-in-world off while plain Quake had it on.
+	*/
+	{
+		static const char * const carry[] = {
+			"vr_menu_in_world",
+			"vr_menu_in_world_dim",
+			"vr_menu_in_world_scale",
+			"vr_hud_height",
+			NULL
+		};
+		int c;
+
+		for (c = 0; carry[c]; c++)
+		{
+			cvar_t *v = Cvar_FindVar(carry[c]);
+
+			if (!v)
+				continue;
+
+			// One argv element, quoted, so the command and its value arrive
+			// together the way the engine expects.
+			strlcat(cmdline, " \"+", sizeof(cmdline));
+			strlcat(cmdline, v->name, sizeof(cmdline));
+			strlcat(cmdline, " ", sizeof(cmdline));
+			strlcat(cmdline, v->string, sizeof(cmdline));
+			strlcat(cmdline, "\"", sizeof(cmdline));
+		}
+	}
+
 	memset(&si, 0, sizeof(si));
 	si.cb = sizeof(si);
 	memset(&pi, 0, sizeof(pi));

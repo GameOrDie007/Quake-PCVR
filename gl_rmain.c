@@ -4276,11 +4276,13 @@ void GL_Main_Init(void)
 		extern cvar_t vr_mirror;
 		extern cvar_t vr_menu_in_world;
 		extern cvar_t vr_menu_in_world_dim;
+		extern cvar_t vr_menu_in_world_scale;
 		Cvar_RegisterVariable(&vr_supersampling);
 		Cvar_RegisterVariable(&vr_msaa);
 		Cvar_RegisterVariable(&vr_mirror);
 		Cvar_RegisterVariable(&vr_menu_in_world);
 		Cvar_RegisterVariable(&vr_menu_in_world_dim);
+		Cvar_RegisterVariable(&vr_menu_in_world_scale);
 	}
 	Cvar_RegisterVariable(&r_motionblur);
 	Cvar_RegisterVariable(&r_damageblur);

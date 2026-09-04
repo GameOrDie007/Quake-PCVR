@@ -125,6 +125,21 @@ cvar_t vr_menu_in_world = {CVAR_SAVE, "vr_menu_in_world", "0", "keep the world i
 */
 cvar_t vr_menu_in_world_dim = {CVAR_SAVE, "vr_menu_in_world_dim", "0.45", "how much to darken the world behind an in-world menu, 0 = not at all, 1 = black. Only used when vr_menu_in_world is on"};
 
+/*
+	How much to shrink an in-world menu.
+
+	Menus are laid out in console coordinates and the console spans the entire
+	eye buffer, so a menu that takes half the console takes half the field of
+	view - far larger than anything you would want to read in a headset, and
+	the mod list, which asks for the whole console height, fills the view
+	completely. Nothing is wrong with the layouts; they are simply being shown
+	at the size of the whole display.
+
+	Only applies in world. On the flat quad Team Beef's sizing is right, because
+	the quad was sized to suit it.
+*/
+cvar_t vr_menu_in_world_scale = {CVAR_SAVE, "vr_menu_in_world_scale", "0.7", "shrink an in-world menu by this factor, about the centre of view. Only used when vr_menu_in_world is on"};
+
 // cl_video.h is not reached from quakedef.h, and this is the only thing needed
 // from it: true while a logo movie or cutscene is playing.
 extern int cl_videoplaying;
