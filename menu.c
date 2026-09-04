@@ -5440,6 +5440,57 @@ static int modlist_cursor;
 static int modlist_count = 0;
 static modlist_entry_t modlist[MODLIST_TOTALSIZE];
 
+/*
+	Does this directory hold anything Quake would actually load?
+
+	FS_CheckGameDir accepts any non-empty directory, which is why the port's own
+	tools/ folder - three Python scripts - was offered as a mod. A real mod has
+	at least a pak, a progs.dat, or one of the content subdirectories; the list
+	below is deliberately generous, because a map pack may be nothing but maps/
+	and a sound replacement nothing but sound/.
+
+	Checked in both the base directory and the user directory, because a mod may
+	be installed in either, exactly as FS_CheckGameDir looks in both.
+*/
+static qboolean ModList_DirHasContent(const char *base, const char *dir)
+{
+	static const char * const contentdirs[] = {
+		"maps", "progs", "sound", "gfx", "music", "models", "textures", "env",
+		"particles", "scripts", NULL
+	};
+	stringlist_t list;
+	char path[MAX_OSPATH];
+	qboolean found = false;
+	int i, j;
+
+	if (!base || !*base)
+		return false;
+
+	dpsnprintf(path, sizeof(path), "%s%s/", base, dir);
+
+	stringlistinit(&list);
+	listdirectory(&list, path, "");
+
+	for (i = 0; i < list.numstrings && !found; i++)
+	{
+		const char *name = list.strings[i];
+		size_t len = strlen(name);
+
+		if (len > 4 && (!strcasecmp(name + len - 4, ".pak") ||
+						!strcasecmp(name + len - 4, ".pk3")))
+			found = true;
+		else if (!strcasecmp(name, "progs.dat"))
+			found = true;
+		else
+			for (j = 0; contentdirs[j] && !found; j++)
+				if (!strcasecmp(name, contentdirs[j]))
+					found = true;
+	}
+
+	stringlistfreecontents(&list);
+	return found;
+}
+
 static void ModList_RebuildList(void)
 {
 	int i,j;
@@ -5459,6 +5510,9 @@ static void ModList_RebuildList(void)
 		//if (gamedirname2 && !strcasecmp(gamedirname2, list.strings[i])) continue;
 		if (FS_CheckNastyPath (list.strings[i], true)) continue;
 		if (!FS_CheckGameDir(list.strings[i])) continue;
+		// ...and that it is a mod rather than any other folder sitting there.
+		if (!ModList_DirHasContent(fs_basedir, list.strings[i]) &&
+			!ModList_DirHasContent(fs_userdir, list.strings[i])) continue;
 
 		strlcpy (modlist[modlist_count].dir, list.strings[i], sizeof(modlist[modlist_count].dir));
 		//check currently loaded mods
