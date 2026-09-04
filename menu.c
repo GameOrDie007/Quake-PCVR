@@ -56,9 +56,11 @@ extern cvar_t cl_trackingmode;
 extern cvar_t bullettime;
 
 extern void BigScreenMode(int mode);
+extern int bigScreen;
 qboolean VR_MenuInWorld(void);
 qboolean VR_Enabled(void);
 extern cvar_t vr_menu_in_world_dim;
+extern cvar_t vr_menu_in_world_scale;
 
 //Record yaw at the moment the menu is invoked
 static float hmdYaw = 0;
@@ -221,7 +223,7 @@ static void M_Background(int width, int height)
 		it. vr_menu_in_world_dim is the middle ground and is a matter of taste,
 		hence a cvar rather than a constant.
 	*/
-	DrawQ_Fill(0, 0, vid_conwidth.integer, vid_conheight.integer, 0, 0, 0,
+	DrawQ_FillScreen(0, 0, 0,
 			VR_MenuInWorld() ? bound(0.0f, vr_menu_in_world_dim.value, 1.0f) : 0.75f, 0);
 }
 
@@ -338,6 +340,17 @@ M_ToggleMenu
 static void M_ToggleMenu(int mode)
 {
 	m_entersound = true;
+
+	/*
+		He reported having to press the menu button twice in game. This fires
+		once per toggle rather than per frame, so it is cheap enough to leave
+		in, and it says which of the two possible causes it is: a first press
+		that lands here and is turned away by the mode test below, or a first
+		press that never reaches here at all - in which case the key is being
+		eaten before Key_Event dispatches it.
+	*/
+	Con_DPrintf("M_ToggleMenu: mode %i, key_dest %i, m_state %i, bigScreen %i, consoleactive %i\n",
+			mode, (int)key_dest, (int)m_state, bigScreen, key_consoleactive);
 
 	if ((key_dest != key_menu && key_dest != key_menu_grabbed) || m_state != m_main)
 	{
@@ -3461,7 +3474,7 @@ static void M_Menu_GameSelect_Key (int key, int ascii)
 	Tegra's Z-buffer - a mobile concession that costs correctness on PC.
 */
 
-#define PCOPTIONS_ITEMS 9
+#define PCOPTIONS_ITEMS 10
 
 static int pcoptions_cursor;
 
@@ -3541,6 +3554,9 @@ static void M_Menu_PCOptions_Draw (void)
 	M_Options_PrintSlider(  "        World dimming", vr_menu_in_world.integer,
 			vr_menu_in_world_dim.value, 0, 1);
 
+	M_Options_PrintSlider(  "            Menu size", vr_menu_in_world.integer,
+			vr_menu_in_world_scale.value, 0.2, 1.0);
+
 	M_Options_PrintCommand(" ", true);
 
 	// vid.width and vid.height are the eye buffer in VR, which is the figure
@@ -3592,6 +3608,8 @@ static void M_Menu_PCOptions_Key (int key, int ascii)
 			Cvar_SetValueQuick(&vr_menu_in_world, 1 - vr_menu_in_world.integer);
 		else if (pcoptions_cursor == 8)
 			Cvar_SetValueQuick(&vr_menu_in_world_dim, bound(0.0f, vr_menu_in_world_dim.value - 0.05f, 1.0f));
+		else if (pcoptions_cursor == 9)
+			Cvar_SetValueQuick(&vr_menu_in_world_scale, bound(0.2f, vr_menu_in_world_scale.value - 0.05f, 1.0f));
 		break;
 
 	case 'd':
@@ -3617,6 +3635,8 @@ static void M_Menu_PCOptions_Key (int key, int ascii)
 			Cvar_SetValueQuick(&vr_menu_in_world, 1 - vr_menu_in_world.integer);
 		else if (pcoptions_cursor == 8)
 			Cvar_SetValueQuick(&vr_menu_in_world_dim, bound(0.0f, vr_menu_in_world_dim.value + 0.05f, 1.0f));
+		else if (pcoptions_cursor == 9)
+			Cvar_SetValueQuick(&vr_menu_in_world_scale, bound(0.2f, vr_menu_in_world_scale.value + 0.05f, 1.0f));
 		break;
 	}
 }
@@ -5561,8 +5581,20 @@ static void M_ModList_Draw (void)
 	const char *s_available = "Available Mods";
 	const char *s_enabled = "Enabled Mods";
 
-	// use as much vertical space as available
-	if (gamemode == GAME_TRANSFUSION)
+	/*
+		Stock takes the whole console height, which is right on a monitor and
+		wrong in a headset: the console spans the entire eye buffer, so the box
+		covers the whole field of view and its contents - laid out from the top
+		of the box - sit at the very top and left, outside comfortable view.
+		Shrinking the menu helps but cannot fix that on its own, because the
+		layout is anchored to a box that is still full height.
+
+		In world it gets a bounded box like every other page, so the same
+		layout centres itself. Sixteen entries still fit.
+	*/
+	if (VR_MenuInWorld())
+		M_Background(640, bound(200, vid_conheight.integer * 2 / 3, 400));
+	else if (gamemode == GAME_TRANSFUSION)
 		M_Background(640, vid_conheight.integer - 80);
 	else
 		M_Background(640, vid_conheight.integer);

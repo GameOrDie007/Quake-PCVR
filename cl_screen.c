@@ -116,6 +116,7 @@ extern void BigScreenMode(int mode);
 qboolean VR_MenuInWorld(void);
 float VR_GetScreenLayerDistance(void);
 float VR_GetIPD(void);
+extern cvar_t vr_menu_in_world_scale;
 
 // Logged once, the first time a menu is drawn into the world in a session.
 static qboolean menudepthreported = false;
@@ -2265,7 +2266,10 @@ bool VR_GetMaxFovTangents(float *tanX, float *tanY);
 		}
 
 		DrawQ_SetStereoOffset(menuoffset);
+		DrawQ_SetStereoScale(VR_MenuInWorld()
+				? bound(0.2f, vr_menu_in_world_scale.value, 1.0f) : 1.0f);
 		MR_Draw();
+		DrawQ_SetStereoScale(1.0f);
 		DrawQ_SetStereoOffset(0.0f);
 	}
 

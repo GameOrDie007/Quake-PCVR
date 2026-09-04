@@ -199,6 +199,14 @@ void DrawQ_Finish(void);
 // around a block of drawing and zero it again; see MR_Draw()'s call site in
 // cl_screen.c. Zero except while a menu is drawn into the world in VR.
 void DrawQ_SetStereoOffset(float offset);
+
+// Uniform scale about the console centre for the same primitives, so a menu
+// laid out for a monitor does not fill a headset's whole field of view.
+void DrawQ_SetStereoScale(float scale);
+
+// A wash over the whole framebuffer, ignoring that scale and offset. For the
+// one thing a menu draws that is screen-sized rather than laid out.
+void DrawQ_FillScreen(float red, float green, float blue, float alpha, int flags);
 void DrawQ_ProcessDrawFlag(int flags, qboolean alpha); // sets GL_DepthMask and GL_BlendFunc
 void DrawQ_RecalcView(void); // use this when changing r_refdef.view.* from e.g. csqc
 

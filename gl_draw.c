@@ -1146,16 +1146,100 @@ void DrawQ_ProcessDrawFlag(int flags, qboolean alpha)
 */
 static float drawq_stereo_offset = 0.0f;
 
+/*
+	Uniform scale about the centre of the console, applied with the offset
+	above. 1 everywhere except while a menu is drawn into the world.
+
+	Menus are laid out in console coordinates, and the console spans the whole
+	eye buffer - so a 320x200 menu box in a 640x480 console covers half the
+	field of view, and the mod list, which asks for the full console height,
+	covers all of it. Shrinking about the centre is what pulls both back into
+	comfortable view without touching a single layout constant.
+*/
+static float drawq_stereo_scale = 1.0f;
+
 void DrawQ_SetStereoOffset(float offset)
 {
 	drawq_stereo_offset = offset;
 }
 
+void DrawQ_SetStereoScale(float scale)
+{
+	drawq_stereo_scale = (scale > 0.01f) ? scale : 1.0f;
+}
+
+/*
+	A wash over the whole framebuffer, deliberately outside the transform above.
+
+	Everything else a menu draws is laid out and should shrink with it; this one
+	is screen-sized by definition. Scaled along with the rest it stops being a
+	dim over the view and becomes a dark rectangle in the middle of it, with the
+	world at full brightness around the edges.
+*/
+void DrawQ_FillScreen(float red, float green, float blue, float alpha, int flags)
+{
+	const float saved_scale = drawq_stereo_scale;
+	const float saved_offset = drawq_stereo_offset;
+
+	drawq_stereo_scale = 1.0f;
+	drawq_stereo_offset = 0.0f;
+
+	DrawQ_Fill(0, 0, vid_conwidth.integer, vid_conheight.integer,
+			red, green, blue, alpha, flags);
+
+	drawq_stereo_scale = saved_scale;
+	drawq_stereo_offset = saved_offset;
+}
+
+// Position and size together, so a primitive shrinks as well as moves. Pass
+// NULL for w/h on primitives that have neither.
+static void DrawQ_Stereo(float *x, float *y, float *w, float *h)
+{
+	if (drawq_stereo_scale != 1.0f)
+	{
+		const float cx = vid_conwidth.integer * 0.5f;
+		const float cy = vid_conheight.integer * 0.5f;
+
+		*x = cx + (*x - cx) * drawq_stereo_scale;
+		*y = cy + (*y - cy) * drawq_stereo_scale;
+
+		if (w)
+			*w *= drawq_stereo_scale;
+		if (h)
+			*h *= drawq_stereo_scale;
+	}
+
+	*x += drawq_stereo_offset;
+}
+
+// Lengths rather than positions - a pivot, an extent - which scale but must
+// not be re-centred or shifted.
+static void DrawQ_Stereo_ScaleOnly(float *a, float *b)
+{
+	if (drawq_stereo_scale != 1.0f)
+	{
+		*a *= drawq_stereo_scale;
+		*b *= drawq_stereo_scale;
+	}
+}
+
+// The inverse of the x half, for returning a caller's coordinate to the space
+// it handed in. See DrawQ_String_Scale.
+static float DrawQ_StereoUnX(float x)
+{
+	const float cx = vid_conwidth.integer * 0.5f;
+
+	x -= drawq_stereo_offset;
+
+	if (drawq_stereo_scale != 1.0f)
+		x = cx + (x - cx) / drawq_stereo_scale;
+
+	return x;
+}
+
 void DrawQ_Pic(float x, float y, cachepic_t *pic, float width, float height, float red, float green, float blue, float alpha, int flags)
 {
 	float floats[36];
-
-	x += drawq_stereo_offset;
 
 	_DrawQ_SetupAndProcessDrawFlag(flags, pic, alpha);
 	if(!r_draw2d.integer && !r_draw2d_force)
@@ -1194,6 +1278,10 @@ void DrawQ_Pic(float x, float y, cachepic_t *pic, float width, float height, flo
 	else
 		R_SetupShader_Generic_NoTexture((flags & DRAWFLAGS_BLEND) ? false : true, true);
 
+	// After the pic has supplied any missing width or height, so that those
+	// are scaled too.
+	DrawQ_Stereo(&x, &y, &width, &height);
+
 	floats[2] = floats[5] = floats[8] = floats[11] = 0;
 	floats[0] = floats[9] = x;
 	floats[1] = floats[4] = y;
@@ -1214,8 +1302,6 @@ void DrawQ_RotPic(float x, float y, cachepic_t *pic, float width, float height, 
 	float sinar = sin(ar);
 	float cosar = cos(ar);
 
-	x += drawq_stereo_offset;
-
 	_DrawQ_SetupAndProcessDrawFlag(flags, pic, alpha);
 	if(!r_draw2d.integer && !r_draw2d_force)
 		return;
@@ -1231,6 +1317,11 @@ void DrawQ_RotPic(float x, float y, cachepic_t *pic, float width, float height, 
 	}
 	else
 		R_SetupShader_Generic_NoTexture((flags & DRAWFLAGS_BLEND) ? false : true, true);
+
+	// The pivot is an offset within the pic, so it scales with the pic. The
+	// angle is untouched - a uniform scale does not change it.
+	DrawQ_Stereo(&x, &y, &width, &height);
+	DrawQ_Stereo_ScaleOnly(&org_x, &org_y);
 
 	floats[2] = floats[5] = floats[8] = floats[11] = 0;
 
@@ -1267,7 +1358,7 @@ void DrawQ_Fill(float x, float y, float width, float height, float red, float gr
 {
 	float floats[36];
 
-	x += drawq_stereo_offset;
+	DrawQ_Stereo(&x, &y, &width, &height);
 
 	_DrawQ_SetupAndProcessDrawFlag(flags, NULL, alpha);
 	if(!r_draw2d.integer && !r_draw2d_force)
@@ -1566,10 +1657,11 @@ float DrawQ_String_Scale(float startx, float starty, const char *text, size_t ma
 	tw = R_TextureWidth(fnt->tex);
 	th = R_TextureHeight(fnt->tex);
 
-	// Applied here and removed again from both returns, so a caller that chains
+	// Applied here and undone again on both returns, so a caller that chains
 	// from the returned x - the console and the notify area both do - keeps
-	// working in unshifted coordinates.
-	startx += drawq_stereo_offset;
+	// working in the coordinates it handed in. w and h are the glyph size, so
+	// they scale with everything else or the text would not shrink.
+	DrawQ_Stereo(&startx, &starty, &w, &h);
 	x = startx;
 
 	if (!h) h = w;
@@ -1603,7 +1695,7 @@ float DrawQ_String_Scale(float startx, float starty, const char *text, size_t ma
 
 	_DrawQ_SetupAndProcessDrawFlag(flags, NULL, 0);
 	if(!r_draw2d.integer && !r_draw2d_force)
-		return startx - drawq_stereo_offset + DrawQ_TextWidth_UntilWidth_TrackColors_Scale(text, &maxlen, w, h, sw, sh, NULL, ignorecolorcodes, fnt, 1000000000);
+		return DrawQ_StereoUnX(startx) + DrawQ_TextWidth_UntilWidth_TrackColors_Scale(text, &maxlen, w, h, sw, sh, NULL, ignorecolorcodes, fnt, 1000000000);
 
 //	R_Mesh_ResetTextureState();
 	if (!fontmap)
@@ -1889,7 +1981,7 @@ out:
 		*outcolor = colorindex;
 	
 	// note: this relies on the proper text (not shadow) being drawn last
-	return x - drawq_stereo_offset;
+	return DrawQ_StereoUnX(x);
 }
 
 float DrawQ_String(float startx, float starty, const char *text, size_t maxlen, float w, float h, float basered, float basegreen, float baseblue, float basealpha, int flags, int *outcolor, qboolean ignorecolorcodes, const dp_font_t *fnt)
@@ -1956,7 +2048,7 @@ void DrawQ_SuperPic(float x, float y, cachepic_t *pic, float width, float height
 {
 	float floats[36];
 
-	x += drawq_stereo_offset;
+	DrawQ_Stereo(&x, &y, &width, &height);
 
 	_DrawQ_SetupAndProcessDrawFlag(flags, pic, a1*a2*a3*a4);
 	if(!r_draw2d.integer && !r_draw2d_force)
@@ -2055,8 +2147,8 @@ void DrawQ_LineLoop (drawqueuemesh_t *mesh, int flags)
 //[515]: this is old, delete
 void DrawQ_Line (float width, float x1, float y1, float x2, float y2, float r, float g, float b, float alpha, int flags)
 {
-	x1 += drawq_stereo_offset;
-	x2 += drawq_stereo_offset;
+	DrawQ_Stereo(&x1, &y1, NULL, NULL);
+	DrawQ_Stereo(&x2, &y2, NULL, NULL);
 
 	_DrawQ_SetupAndProcessDrawFlag(flags, NULL, alpha);
 	if(!r_draw2d.integer && !r_draw2d_force)
@@ -2148,8 +2240,8 @@ void DrawQ_SetClipArea(float x, float y, float width, float height)
 	int ix, iy, iw, ih;
 	_DrawQ_Setup();
 
-	// The clip rectangle has to travel with what it clips.
-	x += drawq_stereo_offset;
+	// The clip rectangle has to travel with, and shrink with, what it clips.
+	DrawQ_Stereo(&x, &y, &width, &height);
 
 	// We have to convert the con coords into real coords
 	// OGL uses top to bottom
