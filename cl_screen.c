@@ -628,13 +628,33 @@ SCR_DrawInfobar
 */
 static void SCR_DrawInfobar(void)
 {
-	int offset = 30;
+	/*
+		Upstream DarkPlaces bug, present in the 2013 base this forked from and
+		nothing to do with the VR work.
+
+		`offset` starts at the y position the bar is drawn down the screen and
+		then accumulates heights, while SCR_InfobarHeight - which is what fills
+		scr_con_margin_bottom - accumulates the same heights from zero. The two
+		therefore differ by exactly that starting position on every frame, and
+		the check has fired every frame for the life of the engine.
+
+		It is invisible at developer 0, which is why nobody noticed, but it was
+		98.7% of every log this build wrote - 13,247 lines out of 13,427 in five
+		seconds - which makes "send me the log" useless. At developer 1 it also
+		floods the notify area, and in a headset that text is welded to the
+		player's face.
+
+		Compare like with like. If this prints now, it means something.
+	*/
+	const int top = 30;
+	int offset = top;
+
 	offset += SCR_DrawQWDownload(offset);
 	offset += SCR_DrawCurlDownload(offset);
 	if(scr_infobartime_off > 0)
 		offset += SCR_DrawInfobarString(offset);
-	if(offset != scr_con_margin_bottom)
-		Con_DPrintf("broken console margin calculation: %d != %d\n", offset, scr_con_margin_bottom);
+	if(offset - top != scr_con_margin_bottom)
+		Con_DPrintf("broken console margin calculation: %d != %d\n", offset - top, scr_con_margin_bottom);
 }
 
 static int SCR_InfobarHeight(void)
