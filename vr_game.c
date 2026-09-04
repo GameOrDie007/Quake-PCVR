@@ -313,7 +313,15 @@ static void handleTrackedControllerButton(ovrInputStateTrackedRemote * trackedRe
 {
 	if ((trackedRemoteState->Buttons & button) != (prevTrackedRemoteState->Buttons & button))
 	{
-		QC_KeyEvent((trackedRemoteState->Buttons & button) > 0 ? 1 : 0, key, 0);
+		int down = (trackedRemoteState->Buttons & button) > 0 ? 1 : 0;
+
+		// The first link in the chain that opens the menu. Logged only for
+		// escape, which is pressed a handful of times a session.
+		if (key == K_ESCAPE)
+			Con_DPrintf("VR button: ESCAPE %s (button %u, bigScreen %i)\n",
+					down ? "down" : "up", (unsigned)button, bigScreen);
+
+		QC_KeyEvent(down, key, 0);
 	}
 }
 

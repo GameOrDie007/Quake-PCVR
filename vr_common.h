@@ -21,7 +21,19 @@
 #include "vr_tbxr.h"
 
 #define ALOGE(...) Con_Printf(__VA_ARGS__)
-#define ALOGV(...) Con_DPrintf(__VA_ARGS__)
+
+/*
+	Their verbose log, which on Android goes to logcat - free, and somewhere no
+	player would ever send you. On PC Con_DPrintf reaches log_file even at
+	developer 0, and these fire every frame: one short session produced 86,568
+	of them and a 5.6MB file, which buries the few lines a log exists for.
+
+	Behind a cvar, off. Note the call sites carry no newline, because logcat
+	ends a line per call and the console does not - so turning this on gives one
+	enormous line rather than many.
+*/
+extern cvar_t vr_log_controllers;
+#define ALOGV(...) do { if (vr_log_controllers.integer) Con_DPrintf(__VA_ARGS__); } while (0)
 
 extern ovrInputStateTrackedRemote leftTrackedRemoteState_old;
 extern ovrInputStateTrackedRemote leftTrackedRemoteState_new;
