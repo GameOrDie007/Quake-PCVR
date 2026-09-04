@@ -1801,6 +1801,13 @@ Key_Event (int key, int ascii, qboolean down)
 		ascii = tbl_keyascii[key];
 	}
 
+	// The second link: what the key layer made of it. Between this and the
+	// VR button line and M_ToggleMenu's own, a press that does nothing can be
+	// placed at the exact hop that drops it.
+	if (key == K_ESCAPE)
+		Con_DPrintf("Key_Event ESCAPE: %s, keydown %i, keydest %i, key_dest %i, consoleactive %i\n",
+				down ? "down" : "up", keydown[key], (int)keydest, (int)key_dest, key_consoleactive);
+
 	if(keydest == key_void)
 		return;
 	

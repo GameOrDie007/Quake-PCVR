@@ -140,6 +140,10 @@ cvar_t vr_menu_in_world_dim = {CVAR_SAVE, "vr_menu_in_world_dim", "0.45", "how m
 */
 cvar_t vr_menu_in_world_scale = {CVAR_SAVE, "vr_menu_in_world_scale", "0.7", "shrink an in-world menu by this factor, about the centre of view. Only used when vr_menu_in_world is on"};
 
+// Their per-frame controller logging. Not archived: it is a debugging aid, and
+// leaving it on writes megabytes a minute. See ALOGV in vr_common.h.
+cvar_t vr_log_controllers = {0, "vr_log_controllers", "0", "log controller poses every frame. Very large; for debugging only"};
+
 // cl_video.h is not reached from quakedef.h, and this is the only thing needed
 // from it: true while a logo movie or cutscene is playing.
 extern int cl_videoplaying;
