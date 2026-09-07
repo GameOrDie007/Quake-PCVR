@@ -241,6 +241,77 @@ float VR_GetDemoYaw(void)
 	return s_demoYaw;
 }
 
+/*
+	Turn the player inside the demo with the weapon hand's stick.
+
+	The anchor decides where they start facing; this is how they look somewhere
+	else afterwards. It moves the offset rather than cl.viewangles for the same
+	reason the anchor does - see VR_GetDemoYaw's own note - and at the same
+	90 degrees a second the sibling Quake II port uses, so the two feel alike.
+
+	Deliberately not gated on a menu being open. Being able to turn while the
+	main menu sits over the demo is the point: the world behind it is a real
+	map, and a player who cannot turn in it is looking at a picture.
+*/
+void VR_DemoTurn(float stickX, float dt)
+{
+	if (!VR_DemoAnglesFromHead() || !s_demoAnchored)
+		return;
+
+	if (dt <= 0.0f)
+		return;
+
+	// A tenth of a second, so a hitch cannot fling the view round.
+	if (dt > 0.1f)
+		dt = 0.1f;
+
+	if (fabs(stickX) <= 0.2f)
+		return;
+
+	s_demoYaw -= stickX * 90.0f * dt;
+
+	while (s_demoYaw > 180.0f)
+		s_demoYaw -= 360.0f;
+	while (s_demoYaw < -180.0f)
+		s_demoYaw += 360.0f;
+}
+
+/*
+	The demo freezes while a menu is over it, and picks up where it left off
+	when the menu is hidden.
+
+	On a monitor a demo running on behind a menu is fine. In a headset it
+	carries the player along its route while they are trying to read something,
+	which is both a comfort problem and the reason the menu never sits still.
+
+	cls.demopaused is DarkPlaces' own - CL_ReadDemoMessage simply stops reading
+	while it is set - and the view is built in V_CalcRefdef either way, so the
+	head and the stick keep working over a frozen world.
+
+	The flag means this only ever clears a pause it set itself, so the
+	pausedemo command still belongs to whoever typed it.
+*/
+static qboolean s_demoPausedByMenu = false;
+
+void VR_UpdateDemoPause(void)
+{
+	if (VR_DemoAnglesFromHead() && bigScreen != 0)
+	{
+		if (!s_demoPausedByMenu)
+		{
+			cls.demopaused = true;
+			s_demoPausedByMenu = true;
+			Con_DPrintf("demo: frozen under the menu\n");
+		}
+	}
+	else if (s_demoPausedByMenu)
+	{
+		cls.demopaused = false;
+		s_demoPausedByMenu = false;
+		Con_DPrintf("demo: running again\n");
+	}
+}
+
 void VR_ResetDemoYaw(void)
 {
 	s_demoAnchored = false;

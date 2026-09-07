@@ -737,23 +737,17 @@ static void HandleInput_Default(  )
                            weaponwheel_active ? 0.0f : rightTrackedRemoteState_new.Joystick.y);
 
             if (bigScreen != 0) {
+                /*
+                    The weapon hand's stick is deliberately NOT wired to the
+                    cursor. It turns the view instead - VR_DemoTurn, driven once
+                    per frame from VR_HandleControllerInput - so the player can
+                    look around the world behind a menu without the same push
+                    also driving the cursor. Team Beef wired both sticks to the
+                    cursor because on a flat panel there is nothing else for a
+                    stick to do; here there is.
 
-                int rightJoyState = (rightTrackedRemoteState_new.Joystick.x > 0.7f ? 1 : 0);
-                if (rightJoyState != (rightTrackedRemoteState_old.Joystick.x > 0.7f ? 1 : 0)) {
-                    QC_KeyEvent(rightJoyState, 'd', 0);
-                }
-                rightJoyState = (rightTrackedRemoteState_new.Joystick.x < -0.7f ? 1 : 0);
-                if (rightJoyState != (rightTrackedRemoteState_old.Joystick.x < -0.7f ? 1 : 0)) {
-                    QC_KeyEvent(rightJoyState, 'a', 0);
-                }
-                rightJoyState = (rightTrackedRemoteState_new.Joystick.y < -0.7f ? 1 : 0);
-                if (rightJoyState != (rightTrackedRemoteState_old.Joystick.y < -0.7f ? 1 : 0)) {
-                    QC_KeyEvent(rightJoyState, K_DOWNARROW, 0);
-                }
-                rightJoyState = (rightTrackedRemoteState_new.Joystick.y > 0.7f ? 1 : 0);
-                if (rightJoyState != (rightTrackedRemoteState_old.Joystick.y > 0.7f ? 1 : 0)) {
-                    QC_KeyEvent(rightJoyState, K_UPARROW, 0);
-                }
+                    The off-hand stick still moves it, so nothing is lost.
+                */
 
                 //Click an option
                 handleTrackedControllerButton(&rightTrackedRemoteState_new,
@@ -938,6 +932,18 @@ static void HandleInput_Default(  )
 
 void VR_HandleControllerInput() {
 	TBXR_UpdateControllers();
+
+	VR_UpdateDemoPause();
+
+	/*
+		Outside the branches on purpose: the demo is watched both with a menu
+		over it and without, and the stick has to turn the player either way.
+	*/
+	{
+		ovrInputStateTrackedRemote *dominant = cl_righthanded.integer
+				? &rightTrackedRemoteState_new : &leftTrackedRemoteState_new;
+		VR_DemoTurn(dominant->Joystick.x, (float)cl.realframetime);
+	}
 
 	HandleInput_Default();
 
