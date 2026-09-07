@@ -277,7 +277,13 @@ cvar_t cl_particles = {CVAR_SAVE, "cl_particles", "1", "enables particle effects
 cvar_t cl_particles_quality = {CVAR_SAVE, "cl_particles_quality", "1", "multiplies number of particles"};
 cvar_t cl_particles_alpha = {CVAR_SAVE, "cl_particles_alpha", "1", "multiplies opacity of particles"};
 cvar_t cl_particles_size = {CVAR_SAVE, "cl_particles_size", "1", "multiplies particle size"};
-cvar_t cl_particles_quake = {CVAR_SAVE, "cl_particles_quake", "0", "makes particle effects look mostly like the ones in Quake"};
+// 1, not DarkPlaces' 0 and not Team Beef's. Their blood renders black -
+// verified against their own standalone, so faithful rather than broken -
+// and four candidate causes have been eliminated without finding it. This
+// is DarkPlaces' own supported switch and it makes blood classic
+// palette-73 red. It costs the DarkPlaces effect system with it: no
+// smoke, no decals, no bubbles, no blood stains. His call, knowing that.
+cvar_t cl_particles_quake = {CVAR_SAVE, "cl_particles_quake", "1", "makes particle effects look mostly like the ones in Quake"};
 cvar_t cl_particles_blood = {CVAR_SAVE, "cl_particles_blood", "1", "enables blood effects"};
 cvar_t cl_particles_blood_alpha = {CVAR_SAVE, "cl_particles_blood_alpha", "1", "opacity of blood, does not affect decals"};
 cvar_t cl_particles_blood_decal_alpha = {CVAR_SAVE, "cl_particles_blood_decal_alpha", "1", "opacity of blood decal"};
