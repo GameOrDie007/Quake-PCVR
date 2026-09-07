@@ -309,6 +309,93 @@ float length(float x, float y)
 static long oldtime=0;
 long delta=0;
 
+/*
+	Keys this layer has pressed and not yet released.
+
+	Team Beef map some buttons to a key only while a menu is up - B to escape,
+	A to enter. The press arrives, the menu closes, and from the next frame the
+	branch that mapped them no longer runs, so the release is never sent and the
+	key stays down in the key layer for the rest of the session.
+
+	DarkPlaces counts presses in keydown[] and drops anything past the first as
+	an auto-repeat, so the next press of any button sharing that key is
+	discarded. That is the menu button needing two presses, and his log shows it
+	exactly: B closes the menu, no escape-up follows, and the next menu press
+	arrives as "keydown 2" with no M_ToggleMenu line after it. Its own release
+	clears the count, which is why the press after that works.
+
+	So every key pressed here is remembered, and released as soon as its button
+	is, whichever branch happens to be running.
+*/
+#define VR_MAX_HELD_KEYS 8
+
+typedef struct
+{
+	ovrInputStateTrackedRemote *state;
+	uint32_t button;
+	int key;
+} vrHeldKey_t;
+
+static vrHeldKey_t vrHeldKeys[VR_MAX_HELD_KEYS];
+
+static void VR_RememberHeldKey(ovrInputStateTrackedRemote *state, uint32_t button, int key)
+{
+	int i, slot = -1;
+
+	for (i = 0; i < VR_MAX_HELD_KEYS; i++)
+	{
+		if (vrHeldKeys[i].key == key && vrHeldKeys[i].button == button &&
+			vrHeldKeys[i].state == state)
+			return;
+		if (vrHeldKeys[i].key == 0 && slot < 0)
+			slot = i;
+	}
+
+	if (slot < 0)
+		return;   // nobody holds eight buttons at once; dropping one is safe
+
+	vrHeldKeys[slot].state = state;
+	vrHeldKeys[slot].button = button;
+	vrHeldKeys[slot].key = key;
+}
+
+static void VR_ForgetHeldKey(ovrInputStateTrackedRemote *state, uint32_t button, int key)
+{
+	int i;
+
+	for (i = 0; i < VR_MAX_HELD_KEYS; i++)
+	{
+		if (vrHeldKeys[i].key == key && vrHeldKeys[i].button == button &&
+			vrHeldKeys[i].state == state)
+			vrHeldKeys[i].key = 0;
+	}
+}
+
+/*
+	Release anything whose button is no longer down. Runs after the input
+	branches, so a release the branch handled itself has already been forgotten
+	and cannot be sent twice.
+*/
+void VR_ReleaseOrphanedKeys(void)
+{
+	int i;
+
+	for (i = 0; i < VR_MAX_HELD_KEYS; i++)
+	{
+		if (vrHeldKeys[i].key == 0)
+			continue;
+		if (vrHeldKeys[i].state->Buttons & vrHeldKeys[i].button)
+			continue;
+
+		if (vrHeldKeys[i].key == K_ESCAPE)
+			Con_DPrintf("VR button: ESCAPE up (button %u, released outside the branch that pressed it)\n",
+					(unsigned)vrHeldKeys[i].button);
+
+		QC_KeyEvent(0, vrHeldKeys[i].key, 0);
+		vrHeldKeys[i].key = 0;
+	}
+}
+
 static void handleTrackedControllerButton(ovrInputStateTrackedRemote * trackedRemoteState, ovrInputStateTrackedRemote * prevTrackedRemoteState, uint32_t button, int key)
 {
 	if ((trackedRemoteState->Buttons & button) != (prevTrackedRemoteState->Buttons & button))
@@ -320,6 +407,11 @@ static void handleTrackedControllerButton(ovrInputStateTrackedRemote * trackedRe
 		if (key == K_ESCAPE)
 			Con_DPrintf("VR button: ESCAPE %s (button %u, bigScreen %i)\n",
 					down ? "down" : "up", (unsigned)button, bigScreen);
+
+		if (down)
+			VR_RememberHeldKey(trackedRemoteState, button, key);
+		else
+			VR_ForgetHeldKey(trackedRemoteState, button, key);
 
 		QC_KeyEvent(down, key, 0);
 	}
@@ -848,4 +940,7 @@ void VR_HandleControllerInput() {
 	TBXR_UpdateControllers();
 
 	HandleInput_Default();
+
+	// After the branches, so a release one of them handled is already gone.
+	VR_ReleaseOrphanedKeys();
 }
