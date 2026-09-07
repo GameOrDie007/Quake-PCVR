@@ -1488,6 +1488,7 @@ extern cvar_t cl_movementspeed;
 extern cvar_t cl_movespeedkey;
 
 extern cvar_t vr_yawmode;
+extern cvar_t vr_turnspeed;
 extern cvar_t cl_comfort;
 extern cvar_t cl_yawspeed;
 extern cvar_t cl_pitchspeed;

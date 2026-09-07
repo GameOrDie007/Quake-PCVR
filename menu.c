@@ -3033,7 +3033,7 @@ static void M_Menu_Controller_AdjustSliders (int dir)
 			Cvar_SetValueQuick (&cl_comfort, value);
 		}
 	else if (controllermode_cursor == optnum++  && vr_yawmode.integer == 2)
-		Cvar_SetValueQuick (&sensitivity, bound(1, (sensitivity.value + (dir * 0.25)), 10));
+		Cvar_SetValueQuick (&vr_turnspeed, bound(1, (vr_turnspeed.value + (dir * 0.25)), 10));
 }
 
 static void M_Menu_Controller_Key (int key, int ascii)
@@ -3162,7 +3162,7 @@ static void M_Menu_Controller_Draw (void)
 		M_Options_PrintCommand(" Turn Mode:     Smooth Turn", true);
 
 	M_Options_PrintSlider(  "        Snap Turn Angle", (vr_yawmode.integer == 1), cl_comfort.value, 30, 180);
-	M_Options_PrintSlider(  "      Smooth Turn Speed", (vr_yawmode.integer == 2), sensitivity.value, 1, 10);
+	M_Options_PrintSlider(  "      Smooth Turn Speed", (vr_yawmode.integer == 2), vr_turnspeed.value, 1, 10);
 
 	if (vr_weaponwheel.integer == 0)
 		M_Options_PrintCommand("Weapon Wheel:     Off", true);

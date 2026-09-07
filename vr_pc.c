@@ -269,7 +269,14 @@ void VR_DemoTurn(float stickX, float dt)
 	if (fabs(stickX) <= 0.2f)
 		return;
 
-	s_demoYaw -= stickX * 90.0f * dt;
+	/*
+		The same speed the game turns at, rather than a number of its own. In
+		play the stick goes through the mouse accumulator and comes out at
+		1000 * m_yaw * vr_turnspeed degrees a second - see QC_MotionEvent - so
+		that is what the demo uses. A demo that turns at a different rate from
+		the game is the first thing a player notices, and it was 90 flat.
+	*/
+	s_demoYaw -= stickX * (1000.0f * m_yaw.value * vr_turnspeed.value) * dt;
 
 	while (s_demoYaw > 180.0f)
 		s_demoYaw -= 360.0f;
@@ -653,8 +660,18 @@ void QC_MotionEvent(float delta, float dx, float dy)
 	//If not in vr mode, then always use yaw stick control
 	if (vr_yawmode.integer == 2)
 	{
-		in_mouse_x += (dx * delta);
-		in_windowmouse_x += (dx * delta);
+		/*
+			Divided by sensitivity here because the consumer multiplies by it -
+			CL_AdjustAngles' m_yaw * in_mouse_x * modulatedsensitivity - so the
+			turn comes out at exactly vr_turnspeed and stops moving when the
+			mouse speed does. Bounded because a sensitivity of 0 is legal and
+			would otherwise divide by zero.
+		*/
+		const float scale = vr_turnspeed.value /
+				bound(0.01f, sensitivity.value, 100.0f);
+
+		in_mouse_x += (dx * delta) * scale;
+		in_windowmouse_x += (dx * delta) * scale;
 		if (in_windowmouse_x < 0) in_windowmouse_x = 0;
 		if (in_windowmouse_x > vid.width - 1) in_windowmouse_x = vid.width - 1;
 	}
