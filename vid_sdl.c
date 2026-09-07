@@ -47,6 +47,12 @@ int vid_mirrorheight = 0;
 	restart, unlike the eye buffer settings.
 */
 cvar_t vr_mirror = {CVAR_SAVE, "vr_mirror", "2", "the desktop window while in VR: 0 off, 1 window, 2 borderless full screen"};
+// Right by default: most people are right-eye dominant, and the mirror is
+// for other people to watch rather than for the player, who is in the headset.
+cvar_t vr_mirror_eye = {CVAR_SAVE, "vr_mirror_eye", "1", "which eye the desktop mirror shows: 0 left, 1 right"};
+// An eye buffer is nearly square and a monitor is not, so one of the two has
+// to give: crop loses the top and bottom, fit keeps everything and adds bars.
+cvar_t vr_mirror_fit = {CVAR_SAVE, "vr_mirror_fit", "1", "desktop mirror shape: 0 crop to the window, 1 fit the whole eye in it"};
 
 #ifndef __IPHONEOS__
 #ifdef MACOSX
