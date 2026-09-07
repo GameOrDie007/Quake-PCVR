@@ -3091,6 +3091,15 @@ static void M_Menu_Controller_Key (int key, int ascii)
 			M_Menu_Controller_AdjustSliders(-1);
 		break;
 
+	/*
+		A is K_ENTER while a menu is up, and this page handled neither - so
+		every item here answered the stick and nothing else, and Recentre
+		Height, which is the one item you would reach for A to use, did
+		nothing at all. Treated as a step right, which is what a button press
+		means on a page of toggles.
+	*/
+	case K_ENTER:
+	case K_MOUSE1:
 	case 'd':
 	case K_RIGHTARROW:
 		if (controllermode_cursor == 0)
@@ -3134,6 +3143,7 @@ static void M_Menu_Controller_Draw (void)
 {
 	int visible;
 	cachepic_t	*p;
+	char vabuf[1024];
 
 	M_Background(320, bound(200, 32 + OPTIONS_ITEMS * 8, vid_conheight.integer));
 
@@ -3177,8 +3187,21 @@ static void M_Menu_Controller_Draw (void)
 	else
 		M_Options_PrintCommand("Weapon Wheel:     On", true);
 
-	// Sit or stand as you mean to play, then pick this.
-	M_Options_PrintCommand("Recentre Height:     Sit or stand, then ENTER", true);
+	/*
+		Sit or stand as you mean to play, then press A. The captured height is
+		shown once it has been set: an action with no visible result cannot be
+		told apart from one that is not wired up, which is how this read when
+		the page was ignoring A.
+	*/
+	if (playerHeight > 0.0f)
+		M_Options_PrintCommand(va(vabuf, sizeof(vabuf),
+				"Recentre Height:     Now %.2fm", playerHeight), true);
+	else
+		M_Options_PrintCommand("Recentre Height:     Press A", true);
+
+	// Short enough to fit. The page is 320 wide and the first attempt at this
+	// ran off the right edge, losing the very letter it was telling you to press.
+	M_Options_PrintCommand("   sit or stand as you mean to play", true);
 
 	if (vr_yawmode.integer >= 2)
 	{

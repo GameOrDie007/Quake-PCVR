@@ -1492,6 +1492,8 @@ extern cvar_t vr_turnspeed;
 // Takes the current head height as the standing height, so a seated player
 // is not permanently crouched. Controller page, and the vr_recentre command.
 void VR_RecentreHeight(void);
+// The height Recentre Height last captured, shown on the Controller page.
+extern float playerHeight;
 extern cvar_t cl_comfort;
 extern cvar_t cl_yawspeed;
 extern cvar_t cl_pitchspeed;

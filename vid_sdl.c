@@ -2204,6 +2204,35 @@ static qboolean VID_InitModeGL(viddef_mode_t *mode)
 		ever receives the mirror blit, and its real size lives in
 		vid_mirrorwidth/vid_mirrorheight for that blit to use.
 	*/
+	/*
+		A config written by a build that saved the eye size still says 3993x4243
+		here, and this runs before the session exists, so vr_eyewidth is still 0
+		and the branch below cannot catch it. Clamped to something that fits on
+		a desktop; the eye buffers are sized from the runtime and are not
+		affected.
+	*/
+	{
+		SDL_DisplayMode desktop;
+
+		/*
+			Deliberately not gated on VR_Enabled(). That is vr_active, which is
+			only true once the session exists - and this runs before it, which
+			is exactly the launch that needs catching. A window larger than the
+			desktop is wrong whether or not a headset is involved, so that is
+			the test.
+		*/
+		if (SDL_GetDesktopDisplayMode(0, &desktop) == 0)
+		{
+			if (mode->width > desktop.w || mode->height > desktop.h)
+			{
+				Con_Printf("VR: ignoring saved window size %ix%i - that is an eye "
+						"buffer, not a window\n", mode->width, mode->height);
+				mode->width = min(mode->width, desktop.w);
+				mode->height = min(mode->height, desktop.h);
+			}
+		}
+	}
+
 	if (vr_eyewidth > 0 && vr_eyeheight > 0)
 	{
 		float scale;
