@@ -2515,6 +2515,7 @@ void CL_Init (void)
 	Cvar_RegisterVariable (&cl_movementspeed);
 	Cvar_RegisterVariable (&cl_movespeedkey);
 	Cvar_RegisterVariable (&cl_yawspeed);
+	Cmd_AddCommand ("vr_recentre", VR_RecentreHeight, "take your current head height as your standing height");
 	Cvar_RegisterVariable (&cl_pitchspeed);
 	Cvar_RegisterVariable (&cl_anglespeedkey);
 	Cvar_RegisterVariable (&cl_shownet);

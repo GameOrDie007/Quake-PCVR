@@ -2978,7 +2978,7 @@ static void M_Reset_Draw (void)
 	M_Print(8 + 4 * (linelength - 11), 16, "Press y / n");
 }
 
-#define	YAWCONTROL_ITEMS	7
+#define	YAWCONTROL_ITEMS	8
 
 static int controllermode_cursor;
 
@@ -3083,6 +3083,10 @@ static void M_Menu_Controller_Key (int key, int ascii)
 		{
 			Cvar_SetValueQuick (&vr_weaponwheel, 1 - vr_weaponwheel.integer);
 		}
+		else if (controllermode_cursor == 7)
+		{
+			VR_RecentreHeight();
+		}
 		else
 			M_Menu_Controller_AdjustSliders(-1);
 		break;
@@ -3112,6 +3116,10 @@ static void M_Menu_Controller_Key (int key, int ascii)
 		else if (controllermode_cursor == 6)
 		{
 			Cvar_SetValueQuick (&vr_weaponwheel, 1 - vr_weaponwheel.integer);
+		}
+		else if (controllermode_cursor == 7)
+		{
+			VR_RecentreHeight();
 		}
 		else
 			M_Menu_Controller_AdjustSliders(1);
@@ -3168,6 +3176,9 @@ static void M_Menu_Controller_Draw (void)
 		M_Options_PrintCommand("Weapon Wheel:     Off", true);
 	else
 		M_Options_PrintCommand("Weapon Wheel:     On", true);
+
+	// Sit or stand as you mean to play, then pick this.
+	M_Options_PrintCommand("Recentre Height:     Sit or stand, then ENTER", true);
 
 	if (vr_yawmode.integer >= 2)
 	{
