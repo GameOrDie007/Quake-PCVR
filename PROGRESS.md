@@ -949,14 +949,27 @@ Two candidates were checked and eliminated:
 - Anything in their `gl_rmain.c`. Diffing it against stock shows no change to
   `R_SetupShader_Generic`, which is what binds the particle texture.
 
-The remaining suspicion, untested, is the `GL_MODULATE` texture mode that
+The remaining suspicion was the `GL_MODULATE` texture mode that
 `R_SetupShader_Generic` is called with for particles: their build runs
 `RENDERPATH_GLES2`, where fixed-function texture environment modes do not
-exist and are emulated by shader permutation. If that path drops the texture
-and leaves white, INVMOD would give exactly this. That would make it a
-DarkPlaces-on-GLES2 defect that Team Beef inherited rather than a choice - and
-it would mean the fix on PC is small, since we run `RENDERPATH_GL20` and could
-plausibly just work if the permutation were selected correctly.
+exist and are emulated by shader permutation. If that path dropped the texture
+and left white, INVMOD would give exactly this - a DarkPlaces-on-GLES2 defect
+Team Beef inherited rather than chose.
+
+**Eliminated, 7 September 2026.** If it were GLES2-specific this port would
+already be red, and it is not. A clean install on a machine that had never run
+it - so `cl_particles_quake` at its default 0 - shows the same black, and the
+log says `vid.support.gl20shaders 1`: this build takes `RENDERPATH_GL20`, not
+GLES2. Whatever leaves the sprite white happens on both paths.
+
+So all four candidates are now spent: scene brightness (INVMOD does not use
+it), their `gl_rmain.c` (unchanged where it matters), the vertex colour (it is
+white by design - the redness is the texture's, so tinting it is not the fix,
+and that was nearly attempted a second time), and the GLES2 permutation. The
+next person needs a different question, not another guess. Dumping the
+generated particle font and confirming whether the blood cells are the inverted
+cyan they should be would at least split "the texture is wrong" from "the
+texture is not arriving".
 
 **Fixing it would be a divergence from their build**, so it belongs on a PC
 extras branch if wanted, exactly as the Quake II port kept `quake2-vr-1to1`
