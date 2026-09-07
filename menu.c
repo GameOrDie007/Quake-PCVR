@@ -5545,18 +5545,6 @@ static void ModList_Enable (void)
 			return; // already using this set of gamedirs, do nothing
 	}
 
-	// this part is basically the same as the FS_GameDir_f function
-	if ((cls.state == ca_connected && !cls.demoplayback) || sv.active)
-	{
-		// actually, changing during game would work fine, but would be stupid
-		Con_Printf("Can not change gamedir while client is connected or server is running!\n");
-		// The second. Two different reasons share this message and it
-		// names neither, so print the state beside it.
-		Con_Printf("mods: refused - state %i, demoplayback %i, sv.active %i\n",
-				(int)cls.state, (int)cls.demoplayback, (int)sv.active);
-		return;
-	}
-
 	/*
 		In VR, do not change gamedir in place. FS_ChangeGameDirs ends in a
 		vid_restart, and the OpenXR swapchain images belong to the GL context
@@ -5588,6 +5576,26 @@ static void ModList_Enable (void)
 		Con_DPrintf("mods: %s", cmd);
 
 		Cbuf_AddText (cmd);
+		return;
+	}
+
+	/*
+		Upstream's guard, kept for the in-place change it was written for:
+		FS_ChangeGameDirs ends in a vid_restart, and doing that under a
+		running level is what their comment calls stupid.
+	
+		It deliberately does not cover the relaunch above. Relaunching from
+		inside a game is exactly what quitting and restarting would do, and
+		is what the Single Player game list has always done - so guarding it
+		only meant a mod could be turned on from the main menu and never
+		turned off again without leaving the game first, with no message
+		anyone in a headset could read.
+	*/
+	if ((cls.state == ca_connected && !cls.demoplayback) || sv.active)
+	{
+		Con_Printf("Can not change gamedir while client is connected or server is running!\n");
+		Con_Printf("mods: refused - state %i, demoplayback %i, sv.active %i\n",
+				(int)cls.state, (int)cls.demoplayback, (int)sv.active);
 		return;
 	}
 
