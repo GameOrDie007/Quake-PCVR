@@ -32,14 +32,22 @@ throughout: QuakeQuest on PC with nothing added, right down to reproducing five
 defects of theirs deliberately, black blood included. Every PC addition here
 was made only after the 1:1 build behaved identically to their Quest release,
 and **every added option defaults to Team Beef's own value**, so an untouched
-install behaves exactly as their game does. Two exceptions, both deliberate:
+install behaves exactly as their game does — with three deliberate exceptions,
+each one switchable back:
 
 * **Menus are drawn in the world** rather than on their flat panel, because a
   PC headset can do that and dropping out of VR to read a menu is the one place
   their design does not carry over. `vr_menu_in_world 0` puts it back.
 * **Turning is smooth**, not snap. Snap is the comfort-safe choice on a
   standalone aimed at newcomers; on PC it is not what people arrive expecting.
-  Options -> Controller switches it, and `vr_yawmode 1` is theirs.
+  Options → Controller switches it, and `vr_yawmode 1` is theirs.
+* **Blood is red.** Their build renders it black — verified against their own
+  standalone, so faithful rather than broken, and four candidate causes have
+  been eliminated without finding it. `cl_particles_quake 1` is DarkPlaces' own
+  supported switch and restores classic Quake particles, red blood included.
+  **It changes every particle, not only blood:** no smoke, no bullet holes or
+  scorch marks, no bubbles underwater, no blood stains on what you shot. If you
+  would rather have those than red blood, PC Options → *Particles: DarkPlaces*.
 
 What this build adds on top:
 
