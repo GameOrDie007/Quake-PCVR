@@ -6,27 +6,27 @@ rem then builds the menu artwork and the message text for the MachineGames
 rem episodes. Everything it produces is made here, from game data already on
 rem this machine - none of it is distributed.
 rem
+rem Nothing has to be installed first. This runs on the PowerShell that comes
+rem with Windows, and reads your Quake from this machine - there is no download
+rem and no other dependency.
+rem
 rem Set QQ_QUAKEDIR first if Quake is somewhere this cannot guess.
 
 cd /d "%~dp0"
 
-set QQPY=
-where python >nul 2>&1 && set QQPY=python
-if not defined QQPY (
-	where py >nul 2>&1 && set QQPY=py
-)
+rem -ExecutionPolicy Bypass applies to this one run only. It changes no system
+rem setting, and is what lets a downloaded script run without the user having to
+rem alter anything.
+powershell -NoProfile -ExecutionPolicy Bypass -File "tools\setup.ps1" "."
 
-if not defined QQPY (
-	echo.
-	echo Python 3 is needed to prepare the install, and was not found.
-	echo Get it from https://www.python.org/downloads/ - tick
-	echo "Add python.exe to PATH" while installing - then run this again.
-	echo.
-	pause
-	exit /b 1
-)
-
-%QQPY% tools\setup.py .
-
+if errorlevel 1 goto failed
 echo.
 pause
+exit /b 0
+
+:failed
+echo.
+echo Setup did not finish. The messages above say why.
+echo.
+pause
+exit /b 1

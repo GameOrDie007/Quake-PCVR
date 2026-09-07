@@ -124,18 +124,24 @@ start "" "%~dp0darkplaces-sdl.exe" -basedir . -nohome -game dopa %*
 EOF
 
 # Expansions, the menu artwork and the episodes' message text. All three are
-# built from the game data on this machine, and tools/setup.py is the single
+# built from the game data on this machine, and tools/setup.ps1 is the single
 # implementation of that - the same script a downloaded release runs through
 # its Setup.bat, so a folder built here and one built by a player come out
 # the same.
+#
+# PowerShell rather than Python, because a release has to run on a machine
+# with nothing installed on it. The Python is kept beside it for working here
+# and the two are verified against each other: every file they produce
+# compared byte for byte, the artwork and qc_strings.txt included.
 #
 # None of what it produces may be redistributed: the artwork is drawn with
 # the re-release's font and the message text is id Software's and
 # MachineGames' writing. Both are why a release ships this script rather
 # than its output.
 mkdir -p "$DEST/tools"
-# make-menu-art.py only exists on the branch that has a menu to draw.
-for t in setup.py make-qc-strings.py make-menu-art.py; do
+# The menu-art tools only exist on the branch that has a menu to draw.
+for t in setup.ps1 common.ps1 qc-strings.ps1 menu-art.ps1 \
+         setup.py make-qc-strings.py make-menu-art.py; do
 	if [ -f "$SRC/tools/$t" ]; then
 		cp "$SRC/tools/$t" "$DEST/tools/"
 	fi
@@ -145,12 +151,21 @@ done
 # in a folder built here can never drift apart.
 cp "$SRC/tools/Setup.bat" "$DEST/"
 
-for py in python python3; do
-	if command -v $py >/dev/null 2>&1; then
-		$py "$SRC/tools/setup.py" "$DEST" "$QQ_QUAKEDIR" || true
-		break
-	fi
-done
+# Build the folder with the script a player actually runs, so what gets
+# tested here is the shipped path and not one sitting beside it.
+winpath() { cygpath -w "$1" 2>/dev/null || echo "$1"; }
+if command -v powershell.exe >/dev/null 2>&1; then
+	powershell.exe -NoProfile -ExecutionPolicy Bypass \
+		-File "$(winpath "$SRC/tools/setup.ps1")" \
+		"$(winpath "$DEST")" "$QQ_QUAKEDIR" || true
+else
+	for py in python python3; do
+		if command -v $py >/dev/null 2>&1; then
+			$py "$SRC/tools/setup.py" "$DEST" "$QQ_QUAKEDIR" || true
+			break
+		fi
+	done
+fi
 
 # The licence this is under, and what the bundled libraries are under.
 cp "$SRC/COPYING" "$DEST/LICENSE.txt"
