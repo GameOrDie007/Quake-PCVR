@@ -534,81 +534,27 @@ static void M_Main_Draw (void)
 		M_Background(640, 480); //fall back is always to 640x480, this makes it most readable at that.
 		y = 480/3-16;
 
-		if (gameAssetsDownloadStatus == -1)
-		{
-			s = "** YOU NEED TO COPY GAME FILES TO YOUR PHONE **";
-			M_PrintRed_Big ((640-strlen(s)*12)*0.5, (480/3)-16, s);y+=32;
-			s = "Due to copyright, game data files can't be included";M_Print_Big (30, y, s);y+=20;
-			s = "Please download the shareware version from:";M_Print_Big(30, y, s);y+=20;
-			s = "http://bit.ly/1PTsnsb";M_Print_Big(30, y, s);y+=20;
-			s = "or copy the pak files from the full version ";M_Print_Big(30, y, s);y+=20;
-			s = "to the following folder :";M_Print_Big(30, y, s);y+=20;
-			s = "{PHONE_MEMORY} / QQUEST / id1";M_Print_Big(30, y, s);y+=28;
-			s = "Full instructions doc: http://bit.ly/21GHVXI";M_Print_Big(30, y, s);y+=20;
-		}
-		else if (gameAssetsDownloadStatus == 0)
-		{
-			s = "** SHAREWARE DOWNLOAD FAILED **";
-			M_PrintRed_Big((640 - strlen(s) * 12) * 0.5, (480 / 3) - 16, s);
-			y += 32;
-			s = "Please restart QQUEST";
-			M_Print_Big(30, y, s);
-			y += 20;
-			s = "and the download will try again";
-			M_Print_Big(30, y, s);
-			y += 20;
-			s = "If you own the full game you can";
-			M_Print_Big(30, y, s);
-			y += 20;
-			s = "copy the pak files from the full version ";
-			M_Print_Big(30, y, s);
-			y += 20;
-			s = "to the following folder :";
-			M_Print_Big(30, y, s);
-			y += 20;
-			s = "{PHONE_MEMORY} / QQUEST / id1";
-			M_Print_Big(30, y, s);
-			y += 28;
-			s = "Full instructions doc: http://bit.ly/21GHVXI";
-			M_Print_Big(30, y, s);
-			y += 20;
-		}
-		else if (gameAssetsDownloadStatus == 1) {
-			s = "** SHAREWARE DOWNLOAD COMPLETED SUCCESSFULLY **";
-			M_PrintRed_Big((640 - strlen(s) * 12) * 0.5, (480 / 3) - 16, s);
-			y += 32;
-			s = "Please restart QQUEST";
-			M_Print_Big(30, y, s);
-			y += 20;
-			s = "If you own the full game you can";
-			M_Print_Big(30, y, s);
-			y += 20;
-			s = "copy the pak files from the full version ";
-			M_Print_Big(30, y, s);
-			y += 20;
-			s = "to the following folder :";
-			M_Print_Big(30, y, s);
-			y += 20;
-			s = "{PHONE_MEMORY} / QQUEST / id1";
-			M_Print_Big(30, y, s);
-			y += 28;
-			s = "Full instructions doc: http://bit.ly/21GHVXI";
-			M_Print_Big(30, y, s);
-			y += 20;
-		}
-		else if (gameAssetsDownloadStatus == 2)
-		{
-			s = "** GAME FILES NEED TO DOWNLOAD TO YOUR PHONE **";
-			M_PrintRed_Big((640 - strlen(s) * 12) * 0.5, (480 / 3) - 16, s);
-			y += 32;
-			s = "Due to copyright, game data files cannot be included";
-			M_Print_Big(30, y, s);
-			y += 20;
-			s = "The shareware version is downloading.";
-			M_Print_Big(30, y, s);
-		}
+		/*
+			Team Beef's version of this screen tells the owner to copy paks into
+			headset storage and offers to download the shareware. Neither
+			applies on PC: there is no download, this folder is the install, and
+			the answer is always the same one file. gameAssetsDownloadStatus is
+			-1 here and nothing changes it, so their other three branches were
+			unreachable as well as wrong.
+		*/
+		s = "** QUAKE GAME DATA NOT FOUND **";
+		M_PrintRed_Big ((640-strlen(s)*12)*0.5, (480/3)-16, s);y+=32;
+		s = "Quake's data cannot be distributed, so it is";M_Print_Big (30, y, s);y+=20;
+		s = "copied from your own copy on this machine.";M_Print_Big (30, y, s);y+=20;
+		y+=10;
+		s = "Close this and run Setup.bat, in this folder.";M_Print_Big (30, y, s);y+=20;
+		s = "It finds Quake on Steam or GOG and does the rest.";M_Print_Big (30, y, s);y+=28;
+		s = "If Quake is somewhere unusual, set QQ_QUAKEDIR";M_Print_Big (30, y, s);y+=20;
+		s = "to the folder holding id1, then run Setup.bat.";M_Print_Big (30, y, s);y+=20;
 
-		M_Print_Big (640/2 - 128, 480/2 + 128, " ++ Tap Screen to Quit ++");
+		/* Their text. There is no screen to tap here; the handler above quits
+		   on K_ENTER, which the A button sends while a menu is up. */
+		M_Print_Big (640/2 - 128, 480/2 + 128, " ++ Press A or Enter to quit ++");
 
 		M_DrawCharacter(640/2 - 128, 480/2 + 128, 12+((int)(realtime*4)&1));
 		return;
