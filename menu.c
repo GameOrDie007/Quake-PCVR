@@ -5550,6 +5550,10 @@ static void ModList_Enable (void)
 	{
 		// actually, changing during game would work fine, but would be stupid
 		Con_Printf("Can not change gamedir while client is connected or server is running!\n");
+		// The second. Two different reasons share this message and it
+		// names neither, so print the state beside it.
+		Con_Printf("mods: refused - state %i, demoplayback %i, sv.active %i\n",
+				(int)cls.state, (int)cls.demoplayback, (int)sv.active);
 		return;
 	}
 
@@ -5577,6 +5581,11 @@ static void ModList_Enable (void)
 			strlcat (cmd, gamedirs[i], sizeof(cmd));
 		}
 		strlcat (cmd, "\n", sizeof(cmd));
+
+		// The third: what it is about to run. Host_RelaunchGame_f prints
+		// its own "relaunching:" line after this, so a gap between the
+		// two is the relaunch failing rather than the menu.
+		Con_DPrintf("mods: %s", cmd);
 
 		Cbuf_AddText (cmd);
 		return;
@@ -5719,6 +5728,9 @@ static void M_ModList_Key(int k, int ascii)
 	case K_MOUSE1:
 	case K_ENTER:
 		S_LocalSound ("sound/misc/menu2.wav");
+		// The first of three: did the button reach this page at all?
+		Con_DPrintf("mods: apply pressed, %i enabled, cursor %i\n",
+				modlist_numenabled, modlist_cursor);
 		ModList_Enable ();
 		break;
 
