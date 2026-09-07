@@ -156,6 +156,9 @@ int vid_gammarampsize = 0;
 unsigned short *vid_gammaramps = NULL;
 unsigned short *vid_systemgammaramps = NULL;
 
+// In VR, vid.mode is the eye buffer - see VID_ApplyMode, which must not save it.
+qboolean VR_Enabled(void);
+
 cvar_t vid_fullscreen = {CVAR_SAVE, "vid_fullscreen", "1", "use fullscreen (1) or windowed (0)"};
 cvar_t vid_width = {CVAR_SAVE, "vid_width", "640", "resolution"};
 cvar_t vid_height = {CVAR_SAVE, "vid_height", "480", "resolution"};
@@ -1870,8 +1873,22 @@ static int VID_Mode(int fullscreen, int width, int height, int bpp, float refres
 		Con_Printf("Video Mode: %s %dx%dx%dx%.2fhz%s%s\n", mode.fullscreen ? "fullscreen" : "window", mode.width, mode.height, mode.bitsperpixel, mode.refreshrate, mode.stereobuffer ? " stereo" : "", mode.samples > 1 ? va(vabuf, sizeof(vabuf), " (%ix AA)", mode.samples) : "");
 
 		Cvar_SetValueQuick(&vid_fullscreen, vid.mode.fullscreen);
-		Cvar_SetValueQuick(&vid_width, vid.mode.width);
-		Cvar_SetValueQuick(&vid_height, vid.mode.height);
+
+		/*
+			Not in VR. vid.mode is the eye buffer there - about 4000x4200 - and
+			these two are CVAR_SAVE, so writing them puts the headset's
+			resolution into config.cfg as the desktop window size. The next
+			launch then asks for a window that large before the session exists,
+			which spans every monitor and shows a corner of the game.
+
+			The mirror keeps its own size in vid_mirrorwidth/vid_mirrorheight
+			and does not need these, so there is nothing to record.
+		*/
+		if (!VR_Enabled())
+		{
+			Cvar_SetValueQuick(&vid_width, vid.mode.width);
+			Cvar_SetValueQuick(&vid_height, vid.mode.height);
+		}
 		Cvar_SetValueQuick(&vid_bitsperpixel, vid.mode.bitsperpixel);
 		Cvar_SetValueQuick(&vid_samples, vid.mode.samples);
 		if(vid_userefreshrate.integer)
