@@ -67,24 +67,26 @@ Things the port of it had to get right, each of which was a real failure first:
 
 ## Open
 
-**1. The menu button sometimes needs two presses.** His log carried exactly two
-`M_ToggleMenu` calls in a whole session and the in-game one succeeded, so the
-first press never reached the menu — something upstream of it eats the edge. The
-chain is traced end to end now: the controller edge in
-`handleTrackedControllerButton`, what the key layer made of it in `Key_Event`,
-and `M_ToggleMenu`'s own line. **Whichever hop is missing from the next log is
-the one that drops it.** The `Key_Event` line sits before both of that function's
-early returns, so a press cannot be dropped silently in front of it.
+**Only one thing, and it is not urgent.** The Mods browser relaunch has been
+fixed but never worn: enabling a mod used to end in `vid_restart` and kill the
+session, and it now relaunches the process the way the Single Player game list
+always has. Test: Options → Browse Mods, enable one, confirm the game restarts
+into it with VR intact, then turn it off and confirm it comes back to plain
+Quake. Multiple mods stack in order. Verified at the desk end to end through
+`ModList_Enable` — two mods give `-game hipnotic -game dopa`, none gives no
+`-game`, a stale one is dropped — so the only unproven hop is the relaunch
+itself, which is the path the game list has used since release.
 
-**2. The Mods browser has been fixed but not worn.** Enabling a mod used to end
-in `vid_restart` and kill the session; it now relaunches the process, the same
-way the Single Player game list always has. Test: Options → Browse Mods, enable
-one, confirm the game restarts into it with VR intact, then turn it off and
-confirm it comes back to plain Quake. Multiple mods stack in order. Verified at
-the desk end to end through `ModList_Enable` — two mods give
-`-game hipnotic -game dopa`, none gives no `-game`, a stale one is dropped — so
-the only unproven hop is the relaunch itself, which is the path the game list has
-used since release.
+**Closed, 7 September 2026: the menu button that needed two presses.** His log
+named it. B is mapped to escape only inside the menu branch of
+`HandleInput_Default`, so B closed the menu, that branch stopped running, and
+B's release never sent the escape up — leaving escape held down in the key
+layer. DarkPlaces counts presses in `keydown[]` and drops anything past the
+first as an auto-repeat, so the next menu press arrived as "keydown 2" and was
+discarded; its own release cleared the count, which is why the one after that
+worked. Every key this layer presses is now released as soon as its button is,
+whichever branch is running. Do not re-derive this from the trace, which is
+still in place and still useful for anything else on that path.
 
 ## Menus in the world — now the default
 
