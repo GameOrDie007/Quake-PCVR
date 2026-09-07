@@ -75,6 +75,8 @@ static GLboolean stageSupported = GL_FALSE;
 // The desktop mirror. vid_sdl.c publishes the real window size here, because
 // vid.width/vid.height are the eye buffer in VR.
 extern int vid_mirrorwidth;
+// Re-reads the drawable size into the two below - see vid_sdl.c for why.
+void VID_RefreshMirrorSize(void);
 extern int vid_mirrorheight;
 extern cvar_t vr_mirror;
 // In vid_sdl.c, which owns the window. Applied here rather than during the
@@ -1236,6 +1238,22 @@ void TBXR_MirrorToWindow(ovrFramebuffer *frameBuffer)
 
 	GLint olddraw = 0, oldread = 0;
 	static qboolean said = false;
+
+	/*
+		Asked for here rather than taken from the cached size.
+
+		VID_ApplyMirrorMode fills vid_mirrorwidth/vid_mirrorheight by calling
+		SDL_GetWindowSize immediately after SDL_SetWindowFullscreen, and on
+		Windows that resize is asynchronous - it happens when the window message
+		is processed, not inside the call. So the cache held the pre-fullscreen
+		size and the blit drew a 754x800 picture into the middle of a television,
+		with the uncleared buffer round it.
+
+		The drawable size, not the window size: GL coordinates are in drawable
+		pixels, and the two differ wherever the desktop is scaled. It costs one
+		call a frame and cannot go stale.
+	*/
+	VID_RefreshMirrorSize();
 
 	// Once, so the log says where this stops when the window stays black.
 	if (!said)
