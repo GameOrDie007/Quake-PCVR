@@ -111,7 +111,7 @@ void BigScreenMode(int mode)
 	Defaults to 0, which is exactly their behaviour. Registered in gl_rmain.c
 	alongside the other PC additions, for the reason given there.
 */
-cvar_t vr_menu_in_world = {CVAR_SAVE, "vr_menu_in_world", "0", "keep the world in stereo behind menus and the attract demo instead of dropping to the flat screen: 0 = Team Beef's flat panel, 1 = in world"};
+cvar_t vr_menu_in_world = {CVAR_SAVE, "vr_menu_in_world", "1", "keep the world in stereo behind menus and the attract demo instead of dropping to the flat screen: 0 = Team Beef's flat panel, 1 = in world"};
 
 /*
 	How much to darken the world behind an in-world menu, 0 to 1.
