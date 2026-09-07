@@ -2512,6 +2512,39 @@ int VID_GetGamma (unsigned short *ramps, int rampsize)
 	between the two. vid_vsync is forced to 0 in VR, so neither swap blocks;
 	the headset is paced by xrWaitFrame.
 */
+/*
+	The size the mirror is about to be drawn into, asked for rather than cached.
+
+	VID_ApplyMirrorMode fills vid_mirrorwidth/vid_mirrorheight by calling
+	SDL_GetWindowSize immediately after SDL_SetWindowFullscreen, and on Windows
+	that resize is asynchronous - it happens when the window message is
+	processed, not inside the call. The cache therefore held the pre-fullscreen
+	size, and the blit drew a 754x800 picture into the middle of a television
+	with the uncleared buffer round it.
+
+	The drawable size, not the window size: GL coordinates are in drawable
+	pixels, and the two differ wherever the desktop is scaled. One call a frame,
+	and it cannot go stale.
+*/
+void VID_RefreshMirrorSize(void);
+void VID_RefreshMirrorSize(void)
+{
+#if SDL_MAJOR_VERSION != 1
+	int dw = 0, dh = 0;
+
+	if (!window)
+		return;
+
+	SDL_GL_GetDrawableSize(window, &dw, &dh);
+
+	if (dw > 0 && dh > 0)
+	{
+		vid_mirrorwidth = dw;
+		vid_mirrorheight = dh;
+	}
+#endif
+}
+
 void VID_PresentMirror(void);
 void VID_PresentMirror(void)
 {
