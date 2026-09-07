@@ -53,8 +53,12 @@ cp "$SRC/darkplaces-sdl.exe" "$STAGE/"
 cp "$SRC"/*.dll "$STAGE/"
 
 echo "Setup scripts..."
-# make-menu-art.py only exists on the branch that has a menu to draw.
-for t in setup.py make-qc-strings.py make-menu-art.py; do
+# PowerShell, so a downloaded release runs with nothing installed. The
+# Python is kept beside it and the two are verified against each other,
+# every file they produce compared byte for byte.
+# The menu-art tools only exist on the branch that has a menu to draw.
+for t in setup.ps1 common.ps1 qc-strings.ps1 menu-art.ps1 \
+         setup.py make-qc-strings.py make-menu-art.py; do
 	if [ -f "$SRC/tools/$t" ]; then
 		cp "$SRC/tools/$t" "$STAGE/tools/"
 	fi
@@ -131,22 +135,33 @@ if [ -n "$found" ]; then
 fi
 echo "  clean"
 
+# Bash paths are not what a Windows program understands.
+winpath() { cygpath -w "$1" 2>/dev/null || echo "$1"; }
+
 echo "Zipping..."
 rm -f "$OUT/$NAME.zip"
 if command -v zip >/dev/null 2>&1; then
 	( cd "$OUT" && zip -qr "$NAME.zip" "$NAME" )
 else
-	# Git Bash has no zip; python is already needed to prepare an install.
-	for py in python python3; do
-		if command -v $py >/dev/null 2>&1; then
-			$py -c "import shutil,sys; shutil.make_archive(sys.argv[1],'zip',sys.argv[2],sys.argv[3])" "$OUT/$NAME" "$OUT" "$NAME"
-			break
-		fi
-	done
+	# Git Bash has no zip. Python is not assumed any more - an install no
+	# longer needs it - so fall back to the PowerShell every Windows has,
+	# and only then to Python.
+	if command -v powershell.exe >/dev/null 2>&1; then
+		powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \
+			"Compress-Archive -Path (Join-Path '$(winpath "$OUT")' '$NAME') -DestinationPath (Join-Path '$(winpath "$OUT")' '$NAME.zip')"
+	fi
+	if [ ! -f "$OUT/$NAME.zip" ]; then
+		for py in python python3; do
+			if command -v $py >/dev/null 2>&1; then
+				$py -c "import shutil,sys; shutil.make_archive(sys.argv[1],'zip',sys.argv[2],sys.argv[3])" "$OUT/$NAME" "$OUT" "$NAME"
+				break
+			fi
+		done
+	fi
 fi
 
 if [ ! -f "$OUT/$NAME.zip" ]; then
-	echo "Could not create the zip - no zip command and no python." >&2
+	echo "Could not create the zip - no zip, no PowerShell and no python." >&2
 	exit 1
 fi
 

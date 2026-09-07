@@ -32,7 +32,10 @@ throughout: QuakeQuest on PC with nothing added, right down to reproducing five
 defects of theirs deliberately, black blood included. Every PC addition here
 was made only after the 1:1 build behaved identically to their Quest release,
 and **every added option defaults to Team Beef's own value**, so an untouched
-install behaves exactly as their game does.
+install behaves exactly as their game does. One exception, made deliberately:
+menus are drawn in the world rather than on their flat panel, because a PC
+headset can do that and dropping out of VR to read a menu is the one place
+their design does not carry over. `vr_menu_in_world 0` puts it back.
 
 What this build adds on top:
 
@@ -44,7 +47,7 @@ What this build adds on top:
 * **A desktop mirror worth streaming** — borderless full screen by default,
   Alt+Enter to windowed and back, resizable, and cropped to the shape of the
   window rather than squashed into it.
-* **Menus and the attract demo in the world**, off by default — see below.
+* **Menus and the attract demo in the world**, on by default — see below.
 
 ### Menus in the world
 
@@ -60,11 +63,12 @@ hang at. The attract demo behind the first menu keeps the world too — and
 because its recorded angles would otherwise turn your head for you, the
 recording keeps only its path while **you** own where you are looking.
 
-Two things worth knowing before you turn it on:
+Two things worth knowing, since it is on out of the box:
 
 * **A camera that moves you without your input is a comfort risk.** The demo
-  carries you along its route. Taking its turning away removes the worst of it,
-  but if it does not agree with you, turn the setting off.
+  behind the first menu carries you along its route. Taking its turning away
+  removes the worst of it, but if it does not agree with you, turn the setting
+  off and everything goes back to Team Beef's flat panel.
 * **World dimming** on the same page controls how much the world behind a menu
   is darkened, because Quake's menu items are bare text with nothing behind
   them and can lose their contrast against a lit wall. It starts at 0.45; Team
@@ -102,8 +106,8 @@ install and copies the game, every expansion it has and the soundtrack out of
 it, then builds the menu artwork and the MachineGames episodes' message text
 from your own data. Nothing is downloaded and nothing leaves your machine.
 
-It needs Python 3, and Pillow as well for the menu artwork - it will say so if
-either is missing, and the game still runs without them.
+Nothing has to be installed first. Setup runs on the PowerShell that comes
+with Windows - there is no Python, no Pillow and no download.
 
 If Setup cannot find Quake - installed somewhere unusual, or on another drive -
 set `QQ_QUAKEDIR` to the folder containing `id1` and run it again, or copy
@@ -259,9 +263,10 @@ To build a playable folder from your own game data:
 tools/package-release.sh "C:/Games/Quake VR"
 ```
 
-Python 3 is needed for the message text, and Pillow as well for the menu
-artwork. Without either, the menu falls back to plain text and the episodes'
-messages show their internal names; everything still runs.
+That needs nothing installed either: it drives the same `tools/setup.ps1` a
+release runs. The Python equivalents in `tools/` are kept for working here,
+and the two are verified against each other - every file they produce compared
+byte for byte, the menu artwork and `qc_strings.txt` included.
 
 ## Known issues
 
