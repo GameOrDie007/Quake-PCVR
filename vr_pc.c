@@ -591,9 +591,24 @@ void VR_SetHMDOrientation(float pitch, float yaw, float roll)
 	}
 }
 
+/*
+	Take the height being stood - or sat - at now as the standing height.
+
+	view.c adds (hmdPosition[1] - playerHeight) to the eye, so this is what
+	makes a chair not read as a crouch. Deliberately a capture rather than an
+	offset: chairs and people differ, and the height in front of us is always
+	right where a guessed number is only sometimes.
+*/
+void VR_RecentreHeight(void)
+{
+	playerHeight = hmdPosition[1];
+	Con_DPrintf("VR: standing height set to %.3f m\n", playerHeight);
+}
+
 void VR_SetHMDPosition(float x, float y, float z)
 {
 	static bool s_useScreen = false;
+	static int s_bigScreen = 0;
 
 	positionDeltaThisFrame[0] = (worldPosition[0] - x);
 	positionDeltaThisFrame[1] = (worldPosition[1] - y);
@@ -612,6 +627,24 @@ void VR_SetHMDPosition(float x, float y, float z)
 		// Record player height on transition.
 		playerHeight = y;
 	}
+
+	/*
+		And on the menu closing, which is the event that was actually doing this
+		before in-world menus existed. Their build flips the screen layer every
+		time a menu opens or closes, so recording on that transition recalibrated
+		standing height constantly; with the world kept behind the menu the layer
+		no longer flips in a level, and the height recorded at load was kept for
+		the rest of the session - sit down and you stay crouched.
+
+		Closing rather than opening, so the height taken is the one being stood
+		(or sat) at going back into play.
+	*/
+	if (s_bigScreen != 0 && bigScreen == 0)
+	{
+		playerHeight = y;
+	}
+
+	s_bigScreen = bigScreen;
 }
 
 /*
