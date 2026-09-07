@@ -440,6 +440,17 @@ cvar_t cl_movecliptokeyboard = {0, "cl_movecliptokeyboard", "0", "if set to 1, a
 // aimed at newcomers; on PC, smooth stick turning is what people arrive
 // expecting, and it is one item away on the Controller page either way.
 cvar_t vr_yawmode = {CVAR_SAVE, "vr_yawmode","2","0 = swivel-chair, 1 = snap, 2 = stick"};
+/*
+	How fast the stick turns in smooth mode, and ours rather than borrowed.
+
+	Team Beef feed the stick through the engine's mouse accumulator, so their
+	turn speed is the mouse multiplier - fine on a device with no mouse, and on
+	PC it makes one control do two unrelated jobs. Worse, sensitivity cannot
+	carry a default here at all: Quake's own default.cfg inside pak0 sets it to
+	3 at startup, so whatever the struct declares is overwritten before anyone
+	sees it. No game data mentions vr_turnspeed, so its default survives.
+*/
+cvar_t vr_turnspeed = {CVAR_SAVE, "vr_turnspeed","5","how fast the stick turns you in smooth turn mode"};
 cvar_t cl_walkdirection = {CVAR_SAVE, "cl_walkdirection","1","0 - Walk in direction of off-hand controller, 1 - Walk in direction of HMD"};
 cvar_t cl_comfort = {CVAR_SAVE, "cl_comfort","45.0","angle by which comfort mode adjusts yaw"};
 cvar_t cl_yawspeed = {CVAR_SAVE, "cl_yawspeed","150","keyboard yaw turning speed"};
@@ -2271,6 +2282,7 @@ void CL_InitInput (void)
 	Cmd_AddCommand ("register_bestweapon", IN_BestWeapon_Register_f, "(for QC usage only) change weapon parameters to be used by bestweapon; stuffcmd this in ClientConnect");
 
 	Cvar_RegisterVariable(&vr_yawmode);
+	Cvar_RegisterVariable(&vr_turnspeed);
 	Cvar_RegisterVariable(&cl_walkdirection);
 	Cvar_RegisterVariable(&cl_comfort);
 	Cvar_RegisterVariable(&cl_yawspeed);
