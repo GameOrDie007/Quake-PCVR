@@ -138,6 +138,7 @@ cvar_t vr_menu_in_world_dim = {CVAR_SAVE, "vr_menu_in_world_dim", "0.45", "how m
 	Only applies in world. On the flat quad Team Beef's sizing is right, because
 	the quad was sized to suit it.
 */
+cvar_t vr_demo_pause = {CVAR_SAVE, "vr_demo_pause", "1", "freeze the attract demo while a menu is over it, and pick it up again when the menu is hidden: 0 = it keeps playing, 1 = it waits"};
 cvar_t vr_menu_in_world_scale = {CVAR_SAVE, "vr_menu_in_world_scale", "0.7", "shrink an in-world menu by this factor, about the centre of view. Only used when vr_menu_in_world is on"};
 
 // Their per-frame controller logging. Not archived: it is a debugging aid, and
@@ -295,7 +296,7 @@ static qboolean s_demoPausedByMenu = false;
 
 void VR_UpdateDemoPause(void)
 {
-	if (VR_DemoAnglesFromHead() && bigScreen != 0)
+	if (VR_DemoAnglesFromHead() && bigScreen != 0 && vr_demo_pause.integer)
 	{
 		if (!s_demoPausedByMenu)
 		{
