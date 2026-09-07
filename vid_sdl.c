@@ -51,8 +51,11 @@ cvar_t vr_mirror = {CVAR_SAVE, "vr_mirror", "2", "the desktop window while in VR
 // for other people to watch rather than for the player, who is in the headset.
 cvar_t vr_mirror_eye = {CVAR_SAVE, "vr_mirror_eye", "1", "which eye the desktop mirror shows: 0 left, 1 right"};
 // An eye buffer is nearly square and a monitor is not, so one of the two has
-// to give: crop loses the top and bottom, fit keeps everything and adds bars.
-cvar_t vr_mirror_fit = {CVAR_SAVE, "vr_mirror_fit", "1", "desktop mirror shape: 0 crop to the window, 1 fit the whole eye in it"};
+// to give. Crop by default, tried both ways in a headset: fitting the whole
+// eye into a 16:9 screen leaves bars down each side wide enough to spoil it
+// for streaming or for anyone watching, which is what the mirror is for.
+// Fit is still there for a squarer monitor or a window.
+cvar_t vr_mirror_fit = {CVAR_SAVE, "vr_mirror_fit", "0", "desktop mirror shape: 0 crop to the window, 1 fit the whole eye in it"};
 
 #ifndef __IPHONEOS__
 #ifdef MACOSX
