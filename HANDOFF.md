@@ -67,26 +67,30 @@ Things the port of it had to get right, each of which was a real failure first:
 
 ## Open
 
-**Only one thing, and it is not urgent.** The Mods browser relaunch has been
-fixed but never worn: enabling a mod used to end in `vid_restart` and kill the
-session, and it now relaunches the process the way the Single Player game list
-always has. Test: Options → Browse Mods, enable one, confirm the game restarts
-into it with VR intact, then turn it off and confirm it comes back to plain
-Quake. Multiple mods stack in order. Verified at the desk end to end through
-`ModList_Enable` — two mods give `-game hipnotic -game dopa`, none gives no
-`-game`, a stale one is dropped — so the only unproven hop is the relaunch
-itself, which is the path the game list has used since release.
+**Nothing.** Everything on `vr-pc` has been worn and confirmed.
 
-**Closed, 7 September 2026: the menu button that needed two presses.** His log
-named it. B is mapped to escape only inside the menu branch of
-`HandleInput_Default`, so B closed the menu, that branch stopped running, and
-B's release never sent the escape up — leaving escape held down in the key
-layer. DarkPlaces counts presses in `keydown[]` and drops anything past the
-first as an auto-repeat, so the next menu press arrived as "keydown 2" and was
-discarded; its own release cleared the count, which is why the one after that
-worked. Every key this layer presses is now released as soon as its button is,
-whichever branch is running. Do not re-derive this from the trace, which is
-still in place and still useful for anything else on that path.
+Two things closed on 7 September 2026, both worth not re-deriving:
+
+**The menu button that needed two presses.** B is mapped to escape only inside
+the menu branch of `HandleInput_Default`, so B closed the menu, that branch
+stopped running, and B's release never sent the escape up — leaving escape held
+down in the key layer. DarkPlaces counts presses in `keydown[]` and drops
+anything past the first as an auto-repeat, so the next menu press arrived as
+"keydown 2" and was discarded; its own release cleared the count, which is why
+the one after that worked. Every key this layer presses is now released as soon
+as its button is, whichever branch is running.
+
+**Mods could be turned on but never off.** It worked from the main menu and
+refused from inside a game — DarkPlaces' guard against changing the gamedir
+while a server runs, printed to a console nobody in a headset can read. Right
+for the in-place change it protects, wrong here: in VR the gamedir is never
+changed in place, the process relaunches, which is what the Single Player game
+list has always done from inside a game. The guard now sits on the in-place
+branch only. He wanted exactly this — "I want to bounce in and out of mods even
+when I'm in the middle of one".
+
+The trace on that path is still in place (`mods: apply pressed` / `mods:
+refused` / `mods: relaunchgame ...`), and it is what found the second one.
 
 ## Menus in the world — now the default
 
