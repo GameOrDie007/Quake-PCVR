@@ -1834,3 +1834,90 @@ The lesson is the same one this file has recorded twice already, and it did not
 stick either time: **ask the machine before reasoning about the machine.** A
 `glGetError` after a suspect call is ten minutes; three theories about frame
 ordering is two evenings and a broken build.
+
+## Setup with nothing installed, and the two-way check that proved it
+
+`Setup.bat` used to look for `python`, then `py`, and tell the player to go and
+install Python 3 if it found neither. Menu artwork additionally wanted Pillow.
+That is two downloads and a PATH tickbox standing between a zip and a game, and
+on a machine without them the release simply did not work — which is how it was
+found, on a second PC, in the sibling Quake II port.
+
+The whole tool chain is now PowerShell, which ships with Windows: `setup.ps1`,
+`common.ps1`, `qc-strings.ps1`, `menu-art.ps1`. `System.Drawing` comes with it
+and draws the menu artwork, so Pillow goes too. One file to run, nothing to
+install, nothing downloaded.
+
+**The Python is kept and the two are verified against each other**, which is the
+part worth recording. An install was built both ways from the same game data and
+every file compared byte for byte — 29 files, all identical, the six `gs_*.tga`
+menu images and the 27,551-byte `qc_strings.txt` included. That sweep is the only
+reason to believe the port: it caught two disagreements that no amount of reading
+would have.
+
+- **Sorting.** PowerShell's default comparer is culture-aware; Python's `sorted`
+  is ordinal. The token list came out in a different order and every line of the
+  file after the first divergence differed. `[System.StringComparer]::Ordinal`.
+- **Capitalisation.** Python's `str.capitalize()` upper-cases the first character
+  *and lower-cases the rest*. .NET has no single call for that, and the obvious
+  `ToTitleCase` is a different function entirely.
+
+Text is written as Latin-1 with no BOM (`GetEncoding(28591)`), because that is
+what the Python wrote and what the engine reads.
+
+Three traps the port had to survive, each a real failure before it was a rule:
+
+- **`Join-Path` is not `os.path.join`.** It is a provider cmdlet: it validates
+  the drive and throws `DriveNotFoundException` for a path on a drive this
+  machine does not have. A list of install guesses is exactly a list of those, so
+  setup died on the first candidate. `[System.IO.Path]::Combine` is pure string
+  handling and is what the Python was doing.
+- **One `FileStream` per pak, not one per entry.** `mg1` and `mg3` are around
+  half a gigabyte each with hundreds of maps in them. Reopening the file for
+  every entry turned a few seconds into minutes.
+- **`Select-Object -First N` kills the producer.** It closes the pipeline as soon
+  as it has its N objects, which terminates the child process feeding it — three
+  separate installs were truncated mid-copy before that was understood. Capture
+  the whole output first, then trim.
+
+Finding the game got better on the way through. It asks Steam where its libraries
+are, via the registry and `libraryfolders.vdf`, rather than guessing drive
+letters, and it scores each candidate on how complete it is rather than taking
+the first hit — then looks for **each piece across every install found**, because
+the classic paks, the re-release episodes and the soundtrack are routinely in
+three different folders. `Test-QuakeOnePak` guards the one genuine ambiguity:
+Quake and Quake II both call a mission pack `rogue`, and Quake keeps its game
+logic in `progs.dat` inside the pak where Quake II keeps it in a DLL.
+
+**Verified from a clean extract**, not from the working tree: the release zip
+unpacked into `Miles' Clean Test (v1.1)` — a space, an apostrophe and
+parentheses, which is what a real user folder looks like and what breaks quoting
+— then `Setup.bat` run from `cmd` with nothing on PATH. It found Quake, copied
+both paks, all five expansions and ten soundtrack tracks, and produced 29 files
+matching the verified reference exactly. The binary in the zip hashes equal to
+the one just built. The engine then loaded e1m1 from that folder and quit through
+its own quit path, writing its log inside the folder, which is the portability
+claim as well.
+
+## Menus in the world become the default
+
+`vr_menu_in_world` shipped at 0 in v1.0, which was right at the time: it had not
+been worn. It has been now, and the four things his first headset session found
+are fixed. So it defaults to 1.
+
+This is the one added option that does not default to Team Beef's own value, and
+the README says so in the same paragraph that makes the claim rather than leaving
+it to be discovered. `vr_menu_in_world 0` restores their flat panel exactly.
+
+Worth stating plainly because it was nearly missed: **an option shipping at the
+wrong default is invisible from inside a working install.** Every test here had
+the feature on, because that is the arm being developed, and the player's config
+carries whatever they last chose — so the one arm that actually ships was the one
+arm never run. The check that caught it is one line: start the engine with a
+fresh user directory and print the cvar. It answered `is "1" ["1"]` — value and
+default, both, in one line.
+
+A declared-defaults audit went with it, across every `vr_*` cvar in the tree.
+Three read 0: `vr_weaponwheel_scan` and `vr_log_controllers` are debugging and
+are not `CVAR_SAVE`, and `vr_hud_height` 0 is an offset rather than an off
+switch. `vr_menu_in_world` was the only feature shipping switched off.

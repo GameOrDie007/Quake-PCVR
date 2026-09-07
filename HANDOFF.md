@@ -1,20 +1,23 @@
 # Handoff
 
-Two changes are in flight on `vr-pc`, both **built, desk-checked and never worn**.
-Nothing here has been in a headset. Read this before touching either.
+Everything on `vr-pc` has now been worn except the two items under **Open** below.
+Read those two before touching anything near menus or controller input.
 
 Last commits:
 
 ```
-9e3e3175 The Mods browser relaunches instead of dropping out of VR
-9dfdc3e0 docs: menus and the demo in the world, and how it was checked without a headset
-100d5216 Menus and the attract demo keep the world, behind vr_menu_in_world
+e74b4123 docs: seven of the listed mods now actually run here
+b3a87ff5 The mods browser lists mods, not every folder beside id1
+9f9adede A log that fits in a message, and a trace for the swallowed menu press
+eb7c43a8 Menus sized for a headset, and settings that survive a game switch
 ```
 
-## Build and run
+## Build, package and run
 
 ```
-sh tools/build-mingw.sh
+sh tools/build-mingw.sh                        # engine
+sh tools/make-release.sh "E:/Games/_release"   # the zip a player downloads
+sh tools/package-release.sh "E:/Games/Quake VR (PC)"   # a playable folder here
 ```
 
 Test install is **`E:\Games\Quake VR (PC)`** — the Setup-produced folder, not
@@ -34,71 +37,94 @@ Driving it from a script: `+"map e1m1" +"defer 3 \"...\"" +"defer 5 screenshot"
 the engine silently never runs it and the process sits there until killed —
 that cost a confusing twenty minutes.
 
-## 1. Menus and the attract demo in the world
+## Setup needs nothing installed
 
-**Off by default.** `vr_menu_in_world 1`, or PC Options → *Menus in world*.
-`vr_menu_in_world_dim` (0.45) is how much the world behind a menu is darkened.
+`tools/setup.ps1` is the implementation, `Setup.bat` is one line that runs it,
+and both a release and a folder built here go through it. It runs on the
+PowerShell that ships with Windows: no Python, no Pillow, no download.
 
-What to look at, in this order:
+The Python originals are kept beside it — `setup.py`, `make-qc-strings.py`,
+`make-menu-art.py` — and **the two are verified against each other rather than
+trusted**: build an install both ways and compare every file byte for byte. That
+sweep is what caught .NET and Python disagreeing about sort order and about
+`capitalize()`. Both are shipped, so a release can be checked on the machine it
+lands on.
 
-1. **Start the game and let the first menu come up over the attract demo.**
-   Does the world stay in stereo, and does it stop turning with your head? The
-   demo carries you along its route; if the movement is uncomfortable, that is
-   the known comfort risk and the answer is to turn the setting off.
-2. **Does the menu fuse?** It is drawn into both eye buffers with a per-eye
-   offset at the screen layer's distance (4.5 m). If it doubles, the
-   convergence is wrong, not the anchoring.
-3. **Open a menu mid-game.** The world should stay lit and stay put, the head
-   should still move the view, and the weapon should vanish rather than ride
-   your face.
-4. **Is 0.45 the right dimming?** Chosen from four photographs on e1m1; it is a
-   matter of taste and it is a slider.
+Things the port of it had to get right, each of which was a real failure first:
 
-**Send the log line.** The first in-world menu of a session writes, via
-`Con_DPrintf`, the convergence in console units, the off-centre offset and the
-IPD. Those numbers cannot be obtained without a session, so they are the one
-thing the desk could not check about the derivation in
-`GetStereoConvergenceOffset` (`gl_rmain.c`). Run with `developer 1` to see it.
+- `[System.IO.Path]::Combine`, never `Join-Path` — the latter is a provider
+  cmdlet and throws on a path whose drive this machine does not have, which a
+  list of install guesses is exactly a list of.
+- Steam libraries come from the registry and `libraryfolders.vdf`, not from
+  guessed drive letters, and each piece is looked for across **every** install
+  found — the classic paks, the re-release episodes and the soundtrack are
+  routinely in three different folders.
+- Quake and Quake II both call a mission pack `rogue`. `Test-QuakeOnePak` looks
+  for `progs.dat` inside the pak, because Quake keeps its game logic there and
+  Quake II keeps it in a DLL.
+- Ordinal sorting (`[System.StringComparer]::Ordinal`) and Latin-1
+  (`GetEncoding(28591)`) throughout, which is what makes the output identical.
 
-**Verified without a headset** — do not re-derive these:
+## Open
 
-- Nothing bypasses the per-eye offset. A forced 40-unit shift moves the side
-  plaque, the id logo, the MAIN banner, all five items and the cursor, and moves
-  neither the world nor the HUD. Correlating the menu's column profile peaks
-  cleanly at 50 px, which is 40 console units at 800/640.
-- The weapon is drawn with the menu shut and gone with it open.
-- The demo answers the head: rendered yaw holds while the recording swings from
-  301° to −4°, and turning moves the render with it, offset by the anchor.
-- With the feature off the build is pixel-identical to the shipped one on scenes
-  that reproduce.
+**1. The menu button sometimes needs two presses.** His log carried exactly two
+`M_ToggleMenu` calls in a whole session and the in-game one succeeded, so the
+first press never reached the menu — something upstream of it eats the edge. The
+chain is traced end to end now: the controller edge in
+`handleTrackedControllerButton`, what the key layer made of it in `Key_Event`,
+and `M_ToggleMenu`'s own line. **Whichever hop is missing from the next log is
+the one that drops it.** The `Key_Event` line sits before both of that function's
+early returns, so a press cannot be dropped silently in front of it.
 
-**Still unknown:** fusion, comfort, and whether the demo anchor aims where it
-should once `hmdorientation` is real rather than the flatscreen zero.
+**2. The Mods browser has been fixed but not worn.** Enabling a mod used to end
+in `vid_restart` and kill the session; it now relaunches the process, the same
+way the Single Player game list always has. Test: Options → Browse Mods, enable
+one, confirm the game restarts into it with VR intact, then turn it off and
+confirm it comes back to plain Quake. Multiple mods stack in order. Verified at
+the desk end to end through `ModList_Enable` — two mods give
+`-game hipnotic -game dopa`, none gives no `-game`, a stale one is dropped — so
+the only unproven hop is the relaunch itself, which is the path the game list has
+used since release.
 
-**Backing out:** `vr_menu_in_world 0` restores Team Beef's behaviour exactly.
+## Menus in the world — now the default
 
-## 2. The Mods browser
+`vr_menu_in_world` defaults to **1**. It is the one added option that does not
+default to Team Beef's own value, and the README says so where it makes that
+claim. `vr_menu_in_world 0` restores their flat panel exactly.
 
-Enabling a mod used to end in `vid_restart` and kill the session. It now
-relaunches the process, the same way the Single Player game list always has.
+Worn and fixed from it (commit `eb7c43a8`): menus were being drawn at the size of
+the whole eye buffer, so they are scaled about the console centre by
+`vr_menu_in_world_scale` (0.7, a slider); the mod list gets a bounded box in
+world; the dimming wash bypasses the transform, because scaling it drew a dark
+rectangle in the middle of a bright world; and the expansions arrived flat
+because DarkPlaces writes `config.cfg` into the *current* gamedir and
+`relaunchgame` drops every `+` command — the relaunch now carries the VR settings
+explicitly.
 
-Test: Options → Browse Mods, enable one, confirm the game restarts into it with
-VR intact; then turn it off again and confirm it comes back to plain Quake.
-Multiple mods stack in order.
+**The convergence derivation is confirmed against a real runtime**, which the
+desk could not do: 1.98 console units at 4.5 m with an IPD of 0.0617 m. Working
+back, an eye frustum 2.216 tangent units wide, and
+(0.0617/2)/4.5/2.216*640 = 1.980 — three figures from a formula derived rather
+than tuned. Do not re-derive it.
 
-**Verified without a headset:** the command line it builds, end to end through
-`ModList_Enable` — two mods give `-game hipnotic -game dopa`, none gives no
-`-game` at all, a stale `-game` from the previous launch is dropped, and
-flatscreen still changes gamedir in place. The relaunch itself is the path the
-game list has used since release, so the only new hop is that string.
+Still a matter of taste rather than correctness: the 0.45 dimming and the 0.7
+scale, both sliders on the PC Options page.
 
 ## Traps specific to this repo
 
 - **Script every source edit in a Python file**, not a shell heredoc. A heredoc
   ate a `\n` out of a `Con_Printf` and produced three compile errors in a string
-  literal.
+  literal; another silently swallowed the line continuations out of two shell
+  scripts.
+- **`cd` in one Bash call persists into the next.** A patch aimed at this repo's
+  `package-release.sh` ran against the Quake II port's instead, and only the
+  anchor check caught it. Use absolute paths.
 - **`r_drawworld 0` does not blank the world here.** It only feeds the CSQC
   vidvars. Two of the early measurements were meaningless because of it.
+- **Per-frame logging is not free here.** Twice in two days a per-frame line
+  owned the log file: an upstream margin check at 98.7% of it, and Team Beef's
+  controller poses at 86,568 messages and 5.6 MB. The log is the one file a
+  player can send you, and `Con_DPrintf` still reaches it at `developer 0`.
 - **Statistics lied twice; the screenshots did not.** A row-brightness figure
   said the menu band and the world band had equal contrast, which was true and
   useless. Looking at the picture showed immediately that Quake's menu items,
