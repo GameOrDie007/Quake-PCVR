@@ -3527,7 +3527,7 @@ static void M_Menu_PCOptions_Draw (void)
 	if (r_polygonoffset_submodel_offset.value != 0)
 		M_Options_PrintCommand("      Door Z-fighting:  Fixed", true);
 	else
-		M_Options_PrintCommand("      Door Z-fighting:  As Quest", true);
+		M_Options_PrintCommand("      Door Z-fighting:  Original", true);
 
 	M_Options_PrintSlider(  "             HUD height", true, vr_hud_height.value, 0, 50);
 
