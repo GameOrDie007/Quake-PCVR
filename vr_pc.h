@@ -67,6 +67,11 @@ qboolean VR_DemoAnglesFromHead(void);
 float VR_GetDemoYaw(void);
 void VR_ResetDemoYaw(void);
 void VR_UpdateDemoYaw(float recordedYaw, qboolean recordedValid);
+// The weapon hand's stick turns the player inside a demo, and the demo
+// freezes while a menu is over it. Both are driven once per frame from
+// VR_HandleControllerInput, outside its menu/gameplay branches.
+void VR_DemoTurn(float stickX, float dt);
+void VR_UpdateDemoPause(void);
 
 // Horizontal extent of an eye's frustum in tangent units, which is what turns a
 // lateral shift in metres into console units. See GetStereoConvergenceOffset.
