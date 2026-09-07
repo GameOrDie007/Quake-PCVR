@@ -32,10 +32,14 @@ throughout: QuakeQuest on PC with nothing added, right down to reproducing five
 defects of theirs deliberately, black blood included. Every PC addition here
 was made only after the 1:1 build behaved identically to their Quest release,
 and **every added option defaults to Team Beef's own value**, so an untouched
-install behaves exactly as their game does. One exception, made deliberately:
-menus are drawn in the world rather than on their flat panel, because a PC
-headset can do that and dropping out of VR to read a menu is the one place
-their design does not carry over. `vr_menu_in_world 0` puts it back.
+install behaves exactly as their game does. Two exceptions, both deliberate:
+
+* **Menus are drawn in the world** rather than on their flat panel, because a
+  PC headset can do that and dropping out of VR to read a menu is the one place
+  their design does not carry over. `vr_menu_in_world 0` puts it back.
+* **Turning is smooth**, not snap. Snap is the comfort-safe choice on a
+  standalone aimed at newcomers; on PC it is not what people arrive expecting.
+  Options -> Controller switches it, and `vr_yawmode 1` is theirs.
 
 What this build adds on top:
 

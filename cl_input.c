@@ -436,7 +436,10 @@ cvar_t cl_movementspeed = {CVAR_SAVE, "cl_movementspeed","170","forward movement
 cvar_t cl_movespeedkey = {CVAR_SAVE, "cl_movespeedkey","2.0","how much +speed multiplies keyboard movement speed"};
 cvar_t cl_movecliptokeyboard = {0, "cl_movecliptokeyboard", "0", "if set to 1, any move is clipped to the nine keyboard states; if set to 2, only the direction is clipped, not the amount"};
 
-cvar_t vr_yawmode = {CVAR_SAVE, "vr_yawmode","1","0 = swivel-chair, 1 = snap, 2 = stick"};
+// 2, not Team Beef's 1. Snap is the comfort-safe choice on a standalone
+// aimed at newcomers; on PC, smooth stick turning is what people arrive
+// expecting, and it is one item away on the Controller page either way.
+cvar_t vr_yawmode = {CVAR_SAVE, "vr_yawmode","2","0 = swivel-chair, 1 = snap, 2 = stick"};
 cvar_t cl_walkdirection = {CVAR_SAVE, "cl_walkdirection","1","0 - Walk in direction of off-hand controller, 1 - Walk in direction of HMD"};
 cvar_t cl_comfort = {CVAR_SAVE, "cl_comfort","45.0","angle by which comfort mode adjusts yaw"};
 cvar_t cl_yawspeed = {CVAR_SAVE, "cl_yawspeed","150","keyboard yaw turning speed"};
