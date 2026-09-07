@@ -61,6 +61,7 @@ qboolean VR_MenuInWorld(void);
 qboolean VR_Enabled(void);
 extern cvar_t vr_menu_in_world_dim;
 extern cvar_t vr_menu_in_world_scale;
+extern cvar_t vr_demo_pause;
 
 //Record yaw at the moment the menu is invoked
 static float hmdYaw = 0;
@@ -3474,7 +3475,7 @@ static void M_Menu_GameSelect_Key (int key, int ascii)
 	Tegra's Z-buffer - a mobile concession that costs correctness on PC.
 */
 
-#define PCOPTIONS_ITEMS 10
+#define PCOPTIONS_ITEMS 11
 
 static int pcoptions_cursor;
 
@@ -3557,6 +3558,14 @@ static void M_Menu_PCOptions_Draw (void)
 	M_Options_PrintSlider(  "            Menu size", vr_menu_in_world.integer,
 			vr_menu_in_world_scale.value, 0.2, 1.0);
 
+	// The attract demo behind the first menu. Paused, it holds still while the
+	// page is read; playing, it carries the viewer along its route as Team
+	// Beef's does. The head and the weapon stick turn the view either way.
+	if (vr_demo_pause.integer)
+		M_Options_PrintCommand("        Demo in menus:  Paused", true);
+	else
+		M_Options_PrintCommand("        Demo in menus:  Playing", true);
+
 	M_Options_PrintCommand(" ", true);
 
 	// vid.width and vid.height are the eye buffer in VR, which is the figure
@@ -3610,6 +3619,8 @@ static void M_Menu_PCOptions_Key (int key, int ascii)
 			Cvar_SetValueQuick(&vr_menu_in_world_dim, bound(0.0f, vr_menu_in_world_dim.value - 0.05f, 1.0f));
 		else if (pcoptions_cursor == 9)
 			Cvar_SetValueQuick(&vr_menu_in_world_scale, bound(0.2f, vr_menu_in_world_scale.value - 0.05f, 1.0f));
+		else if (pcoptions_cursor == 10)
+			Cvar_SetValueQuick(&vr_demo_pause, 1 - vr_demo_pause.integer);
 		break;
 
 	case 'd':
@@ -3637,6 +3648,8 @@ static void M_Menu_PCOptions_Key (int key, int ascii)
 			Cvar_SetValueQuick(&vr_menu_in_world_dim, bound(0.0f, vr_menu_in_world_dim.value + 0.05f, 1.0f));
 		else if (pcoptions_cursor == 9)
 			Cvar_SetValueQuick(&vr_menu_in_world_scale, bound(0.2f, vr_menu_in_world_scale.value + 0.05f, 1.0f));
+		else if (pcoptions_cursor == 10)
+			Cvar_SetValueQuick(&vr_demo_pause, 1 - vr_demo_pause.integer);
 		break;
 	}
 }

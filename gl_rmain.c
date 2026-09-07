@@ -4277,6 +4277,7 @@ void GL_Main_Init(void)
 		extern cvar_t vr_menu_in_world;
 		extern cvar_t vr_menu_in_world_dim;
 		extern cvar_t vr_menu_in_world_scale;
+		extern cvar_t vr_demo_pause;
 		extern cvar_t vr_log_controllers;
 		Cvar_RegisterVariable(&vr_supersampling);
 		Cvar_RegisterVariable(&vr_msaa);
@@ -4284,6 +4285,7 @@ void GL_Main_Init(void)
 		Cvar_RegisterVariable(&vr_menu_in_world);
 		Cvar_RegisterVariable(&vr_menu_in_world_dim);
 		Cvar_RegisterVariable(&vr_menu_in_world_scale);
+		Cvar_RegisterVariable(&vr_demo_pause);
 		Cvar_RegisterVariable(&vr_log_controllers);
 	}
 	Cvar_RegisterVariable(&r_motionblur);
