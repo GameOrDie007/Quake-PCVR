@@ -4274,6 +4274,8 @@ void GL_Main_Init(void)
 		extern cvar_t vr_supersampling;
 		extern cvar_t vr_msaa;
 		extern cvar_t vr_mirror;
+		extern cvar_t vr_mirror_eye;
+		extern cvar_t vr_mirror_fit;
 		extern cvar_t vr_menu_in_world;
 		extern cvar_t vr_menu_in_world_dim;
 		extern cvar_t vr_menu_in_world_scale;
@@ -4282,6 +4284,8 @@ void GL_Main_Init(void)
 		Cvar_RegisterVariable(&vr_supersampling);
 		Cvar_RegisterVariable(&vr_msaa);
 		Cvar_RegisterVariable(&vr_mirror);
+		Cvar_RegisterVariable(&vr_mirror_eye);
+		Cvar_RegisterVariable(&vr_mirror_fit);
 		Cvar_RegisterVariable(&vr_menu_in_world);
 		Cvar_RegisterVariable(&vr_menu_in_world_dim);
 		Cvar_RegisterVariable(&vr_menu_in_world_scale);

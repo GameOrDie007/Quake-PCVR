@@ -75,6 +75,8 @@ static GLboolean stageSupported = GL_FALSE;
 // The desktop mirror. vid_sdl.c publishes the real window size here, because
 // vid.width/vid.height are the eye buffer in VR.
 extern int vid_mirrorwidth;
+extern cvar_t vr_mirror_eye;
+extern cvar_t vr_mirror_fit;
 // Re-reads the drawable size into the two below - see vid_sdl.c for why.
 void VID_RefreshMirrorSize(void);
 extern int vid_mirrorheight;
@@ -1195,7 +1197,8 @@ void TBXR_finishEyeBuffer(int eye)
 		The engine swaps the window later, from CL_EndUpdateScreen, which is
 		after both eyes - so this needs no swap of its own.
 	*/
-	if (eye == 0 && vr_mirror.integer != 0)
+	/* Both eyes are always rendered here, so this is a plain choice. */
+	if (eye == (vr_mirror_eye.integer ? 1 : 0) && vr_mirror.integer != 0)
 		TBXR_MirrorToWindow(frameBuffer);
 
 	ovrFramebuffer_Release(frameBuffer);
@@ -1306,15 +1309,43 @@ void TBXR_MirrorToWindow(ovrFramebuffer *frameBuffer)
 		int cw = sw;
 		int ch = sh;
 		int sx, sy;
+		int dx = 0, dy = 0;
+		int dw = vid_mirrorwidth;
+		int dh = vid_mirrorheight;
 
 		if (vid_mirrorwidth > 0 && vid_mirrorheight > 0)
 		{
-			// The largest rectangle of the window's shape that fits in the eye.
-			ch = (int)((double)sw * vid_mirrorheight / vid_mirrorwidth);
-			if (ch > sh)
+			if (vr_mirror_fit.integer)
 			{
-				ch = sh;
-				cw = (int)((double)sh * vid_mirrorwidth / vid_mirrorheight);
+				/*
+					Fit: the whole eye, scaled to sit inside the window, so
+					nothing of the view is thrown away. The eye is nearly square
+					and a monitor is not, so the rest of the window is bars -
+					cleared first, or the last crop stays in them.
+				*/
+				dh = (int)((double)vid_mirrorwidth * sh / sw);
+				if (dh > vid_mirrorheight)
+				{
+					dh = vid_mirrorheight;
+					dw = (int)((double)vid_mirrorheight * sw / sh);
+				}
+
+				if (dw < 1) dw = 1;
+				if (dh < 1) dh = 1;
+
+				dx = (vid_mirrorwidth - dw) / 2;
+				dy = (vid_mirrorheight - dh) / 2;
+			}
+			else
+			{
+				// Crop: the largest rectangle of the window's shape that fits
+				// in the eye, filling the window and losing the rest.
+				ch = (int)((double)sw * vid_mirrorheight / vid_mirrorwidth);
+				if (ch > sh)
+				{
+					ch = sh;
+					cw = (int)((double)sh * vid_mirrorwidth / vid_mirrorheight);
+				}
 			}
 		}
 
@@ -1327,8 +1358,16 @@ void TBXR_MirrorToWindow(ovrFramebuffer *frameBuffer)
 		sy = (sh - ch) / 2;
 		qglBindFramebuffer(GL_READ_FRAMEBUFFER, frameBuffer->FrameBuffers[frameBuffer->TextureSwapChainIndex]);
 		qglBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
+		if (vr_mirror_fit.integer && (dw < vid_mirrorwidth || dh < vid_mirrorheight))
+		{
+			qglDisable(GL_SCISSOR_TEST);
+			qglClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+			qglClear(GL_COLOR_BUFFER_BIT);
+		}
+
 		qglBlitFramebuffer(sx, sy, sx + cw, sy + ch,
-				0, 0, vid_mirrorwidth, vid_mirrorheight,
+				dx, dy, dx + dw, dy + dh,
 				GL_COLOR_BUFFER_BIT, GL_LINEAR);
 	}
 
