@@ -293,24 +293,56 @@ void VR_DemoTurn(float stickX, float dt)
 	pausedemo command still belongs to whoever typed it.
 */
 static qboolean s_demoPausedByMenu = false;
+static int s_prevBigScreen = 0;
+static qboolean s_prevDemoRunning = false;
 
 void VR_UpdateDemoPause(void)
 {
-	if (VR_DemoAnglesFromHead() && bigScreen != 0 && vr_demo_pause.integer)
+	const qboolean demo = VR_DemoAnglesFromHead();
+	const int screen = bigScreen;
+	/*
+		Not merely playing: connected and parsed. cls.demopaused makes
+		CL_ReadDemoMessage return without reading, so a demo frozen before it
+		has its serverinfo never connects, never reaches SIGNONS and never draws
+		a frame. That is a black screen, and it is what this did on a clean
+		install, because cls.demoplayback is true from the moment the file
+		opens.
+	*/
+	const qboolean running = demo && (cls.signon == SIGNONS);
+
+	if (!demo)
 	{
-		if (!s_demoPausedByMenu)
+		if (s_demoPausedByMenu)
 		{
-			cls.demopaused = true;
-			s_demoPausedByMenu = true;
-			Con_DPrintf("demo: frozen under the menu\n");
+			cls.demopaused = false;
+			s_demoPausedByMenu = false;
 		}
+		s_prevBigScreen = screen;
+		s_prevDemoRunning = running;
+		return;
 	}
-	else if (s_demoPausedByMenu)
+
+	/*
+		Only a menu opened OVER a running demo freezes it - the rising edge.
+		At startup the menu is already up when the attract loop begins, and a
+		menu that was there first is not one the player opened to read.
+	*/
+	if (vr_demo_pause.integer && !s_demoPausedByMenu &&
+		screen != 0 && s_prevBigScreen == 0 && s_prevDemoRunning)
+	{
+		cls.demopaused = true;
+		s_demoPausedByMenu = true;
+		Con_DPrintf("demo: frozen under the menu\n");
+	}
+	else if (s_demoPausedByMenu && (screen == 0 || !vr_demo_pause.integer))
 	{
 		cls.demopaused = false;
 		s_demoPausedByMenu = false;
 		Con_DPrintf("demo: running again\n");
 	}
+
+	s_prevBigScreen = screen;
+	s_prevDemoRunning = running;
 }
 
 void VR_ResetDemoYaw(void)
