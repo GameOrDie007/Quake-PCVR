@@ -240,7 +240,7 @@ kept on purpose, and every bug found along the way with the evidence for it.
 
 ## Credit
 
-* **[Team Beef](https://www.teambeef.org/) / Simon Brown** — all of the VR
+* **[Team Beef](https://www.teambeefvr.com/) / Simon Brown** — all of the VR
   work. The OpenXR session, the input, the weapon handling, the weapon wheel,
   the big-screen menus, the haptics, the movement, the comfort options. Eight
   source files here carry his copyright, and several came across untouched.
