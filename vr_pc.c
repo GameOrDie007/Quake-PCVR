@@ -599,7 +599,7 @@ void VR_SetHMDOrientation(float pitch, float yaw, float roll)
 	offset: chairs and people differ, and the height in front of us is always
 	right where a guessed number is only sometimes.
 */
-void VR_RecentreHeight(void)
+void VR_RecenterHeight(void)
 {
 	playerHeight = hmdPosition[1];
 	Con_DPrintf("VR: standing height set to %.3f m\n", playerHeight);

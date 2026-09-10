@@ -73,8 +73,8 @@ void VR_UpdateDemoYaw(float recordedYaw, qboolean recordedValid);
 void VR_DemoTurn(float stickX, float dt);
 void VR_UpdateDemoPause(void);
 // Takes the current head height as the standing height, so a seated
-// player is not permanently crouched. Controller page, and vr_recentre.
-void VR_RecentreHeight(void);
+// player is not permanently crouched. Controller page, and vr_recenter.
+void VR_RecenterHeight(void);
 
 // Horizontal extent of an eye's frustum in tangent units, which is what turns a
 // lateral shift in metres into console units. See GetStereoConvergenceOffset.
