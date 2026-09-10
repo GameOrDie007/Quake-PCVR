@@ -2515,7 +2515,9 @@ void CL_Init (void)
 	Cvar_RegisterVariable (&cl_movementspeed);
 	Cvar_RegisterVariable (&cl_movespeedkey);
 	Cvar_RegisterVariable (&cl_yawspeed);
-	Cmd_AddCommand ("vr_recentre", VR_RecentreHeight, "take your current head height as your standing height");
+	Cmd_AddCommand ("vr_recenter", VR_RecenterHeight, "take your current head height as your standing height");
+	// The spelling this shipped as. Kept so an existing binding still works.
+	Cmd_AddCommand ("vr_recentre", VR_RecenterHeight, "take your current head height as your standing height");
 	Cvar_RegisterVariable (&cl_pitchspeed);
 	Cvar_RegisterVariable (&cl_anglespeedkey);
 	Cvar_RegisterVariable (&cl_shownet);

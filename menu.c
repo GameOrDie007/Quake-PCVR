@@ -3085,7 +3085,7 @@ static void M_Menu_Controller_Key (int key, int ascii)
 		}
 		else if (controllermode_cursor == 7)
 		{
-			VR_RecentreHeight();
+			VR_RecenterHeight();
 		}
 		else
 			M_Menu_Controller_AdjustSliders(-1);
@@ -3093,7 +3093,7 @@ static void M_Menu_Controller_Key (int key, int ascii)
 
 	/*
 		A is K_ENTER while a menu is up, and this page handled neither - so
-		every item here answered the stick and nothing else, and Recentre
+		every item here answered the stick and nothing else, and Recenter
 		Height, which is the one item you would reach for A to use, did
 		nothing at all. Treated as a step right, which is what a button press
 		means on a page of toggles.
@@ -3128,7 +3128,7 @@ static void M_Menu_Controller_Key (int key, int ascii)
 		}
 		else if (controllermode_cursor == 7)
 		{
-			VR_RecentreHeight();
+			VR_RecenterHeight();
 		}
 		else
 			M_Menu_Controller_AdjustSliders(1);
@@ -3195,9 +3195,9 @@ static void M_Menu_Controller_Draw (void)
 	*/
 	if (playerHeight > 0.0f)
 		M_Options_PrintCommand(va(vabuf, sizeof(vabuf),
-				"Recentre Height:     Now %.2fm", playerHeight), true);
+				"Recenter Height:     Now %.2fm", playerHeight), true);
 	else
-		M_Options_PrintCommand("Recentre Height:     Press A", true);
+		M_Options_PrintCommand("Recenter Height:     Press A", true);
 
 	// Short enough to fit. The page is 320 wide and the first attempt at this
 	// ran off the right edge, losing the very letter it was telling you to press.
