@@ -16,3 +16,7 @@ dopa/
 *.exe
 run/
 *.zip
+
+# Working documents - handoffs and the development log. Ours, not the public repo.
+HANDOFF.md
+PROGRESS.md
