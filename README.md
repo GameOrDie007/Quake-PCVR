@@ -294,3 +294,7 @@ distribute a build, you must pass this source on with it.
 No game data is included in this repository and none may be added to it. The
 menu artwork and the episodes' message text are generated on your machine from
 your own copy of Quake, which is why they are not here.
+
+---
+
+**Get an email when the next port ships:** follow [Game Or Die on Patreon](https://www.patreon.com/cw/GameOrDie) for free. Ports are never paywalled.
