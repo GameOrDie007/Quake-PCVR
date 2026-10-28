@@ -15,14 +15,22 @@ eye, 72Hz.
 
 ## Install
 
-1. Download the release zip and extract it anywhere.
-2. Run `Setup.bat` once.
-3. Run `Quake VR.bat`.
+**The easy way:** download **`Quake PCVR Installer.exe`** from the
+[latest release](https://github.com/GameOrDie007/Quake-PCVR/releases/latest) and
+double-click it. If Windows says it protected your PC, click **More info**, then
+**Run anyway**: the installer is not code-signed. Press **INSTALL**. It finds your Quake, sets everything up and adds a desktop shortcut.
+Start your headset streaming, then press **PRESS START**.
 
-That is the whole thing if you own Quake on Steam or GOG. Setup finds your
-install and copies the game, every expansion it has and the soundtrack out of
-it, then builds the menu artwork and the MachineGames episodes' message text
-from your own data. Nothing is downloaded and nothing leaves your machine.
+**By hand:** download the release zip, unzip it anywhere and double-click
+`Setup.bat`. It finds your Quake on Steam or GOG and makes a `VR` folder inside
+it, with the engine and a copy of the game, every expansion it has and the
+soundtrack, then builds the menu artwork and the MachineGames episodes' message
+text from your own data. Nothing is downloaded and nothing leaves your machine.
+Then run `Quake VR.bat` in that `VR` folder.
+
+**Updating from 1.0 or 1.1:** run the installer or the new `Setup.bat`. A
+folder you unzipped by hand is updated where it is, and your saves and settings
+are kept.
 
 Nothing has to be installed first: Setup runs on the PowerShell that comes
 with Windows, so there is no Python, no Pillow and no download.
@@ -37,8 +45,7 @@ untested: reports welcome. Start your runtime and connect it to the PC
 **before** launching, so it is the one OpenXR picks up.
 
 If Setup cannot find Quake (installed somewhere unusual, or on another drive),
-set `QQ_QUAKEDIR` to the folder containing `id1` and run it again, or copy
-`pak0.pak` and `pak1.pak` into `id1/` by hand and run it again to do the rest.
+drag your Quake folder (the one holding `id1`) onto `Setup.bat`.
 
 `Quake VR (flatscreen).bat` runs it in a window with no headset, which is handy
 for checking settings.
